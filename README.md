@@ -7,7 +7,7 @@ A phone web app for sorting a loose LEGO collection back into sets.
 - Add pieces with a LEGO colour picker; the app says which bin each piece belongs in
 - Everything stays on your phone, with a Google Sheet as backup
 
-Status: stage 1 (set catalogue) is built. See the build stages below.
+Status: stages 1 (set catalogue) and 2 (manual inventory and bins) are built. See the build stages below.
 
 ## Build stages
 
@@ -22,3 +22,7 @@ Status: stage 1 (set catalogue) is built. See the build stages below.
 This repository is public. API keys are never stored in the code: they are pasted into the app's Settings screen and kept on your own device.
 
 Not affiliated with the LEGO Group, Rebrickable or Brickognize. LEGO is a trademark of the LEGO Group.
+
+## Data and credits
+
+Part, colour and category names in `data/` are derived from the [Rebrickable downloads](https://rebrickable.com/downloads/). To refresh them, download the CSVs and run `python3 tools/build-data.py <csv folder>`.

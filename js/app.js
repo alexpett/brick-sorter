@@ -1,56 +1,14 @@
 import * as db from './db.js';
 import * as rb from './rebrickable.js';
 
-const APP_VERSION = '0.1.1 (stage 1)';
+import * as bins from './bins.js';
+import { $, view, esc, decode, fmt, safeRgb, setTitle, toast, openDialog, ask } from './ui.js';
+import { renderAdd } from './screens/add.js';
+import { renderBins, renderBin, confirmAbandon } from './screens/bins.js';
 
-const $ = (sel, root = document) => root.querySelector(sel);
-const view = $('#view');
-
-const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => (
-  { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
-));
-
-// Rebrickable names can contain HTML entities such as &amp; or &#39;.
-function decode(s) {
-  const t = document.createElement('textarea');
-  t.innerHTML = s ?? '';
-  return t.value;
-}
-
-const fmt = (n) => Number(n || 0).toLocaleString('en-GB');
-const safeRgb = (rgb) => (/^[0-9a-f]{6}$/i.test(rgb || '') ? rgb : '999999');
-
-let toastTimer;
-function toast(msg) {
-  const el = $('#toast');
-  el.textContent = msg;
-  el.classList.add('show');
-  clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => el.classList.remove('show'), 3500);
-}
+const APP_VERSION = '0.2.0 (stage 2)';
 
 // ---------- dialogs ----------
-
-function openDialog(html) {
-  return new Promise((resolve) => {
-    const d = $('#dlg');
-    d.innerHTML = `<form method="dialog">${html}</form>`;
-    d.returnValue = '';
-    d.onclose = () => resolve(d.returnValue);
-    d.showModal();
-  });
-}
-
-async function ask({ title, body, ok = 'OK', cancel = 'Cancel', danger = false }) {
-  const result = await openDialog(`
-    <h2>${esc(title)}</h2>
-    <p>${esc(body)}</p>
-    <div class="row">
-      <button class="btn" value="cancel">${esc(cancel)}</button>
-      <button class="btn ${danger ? 'danger' : 'primary'}" value="ok">${esc(ok)}</button>
-    </div>`);
-  return result === 'ok';
-}
 
 async function chooseVersion(options) {
   const buttons = options.map((o, i) => `
@@ -131,6 +89,7 @@ async function storeSet(info, results, catMap, previous) {
     img: info.set_img_url || null,
     status: previous?.status || 'catalogued',
     active_bin: previous?.active_bin ?? null,
+    bin_id: previous?.bin_id ?? null,
     priority: previous?.priority ?? null,
     line_count: lines.length,
     pieces: lines.reduce((n, l) => n + l.qty, 0),
@@ -151,13 +110,16 @@ async function storeSet(info, results, catMap, previous) {
 const routes = {
   '': renderSets,
   set: renderSet,
+  add: renderAdd,
+  bins: renderBins,
+  bin: renderBin,
   settings: renderSettings,
 };
 
 async function route() {
   const [, page = '', arg] = (location.hash.slice(1) || '/').split('/');
   const handler = routes[page] || renderSets;
-  const tab = page === 'settings' ? 'settings' : 'sets';
+  const tab = { add: 'add', bins: 'bins', bin: 'bins', settings: 'settings' }[page] || 'sets';
   document.querySelectorAll('.tabs a').forEach((a) => {
     a.classList.toggle('active', a.dataset.tab === tab);
     if (a.dataset.tab === tab) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current');
@@ -168,11 +130,6 @@ async function route() {
     view.innerHTML = `<section class="panel"><h2>Something went wrong</h2><p>${esc(e.message || e)}</p></section>`;
   }
   window.scrollTo(0, 0);
-}
-
-function setTitle(t) {
-  $('#title').textContent = t;
-  document.title = t === 'Sets' ? 'Brick Sorter' : `${t} · Brick Sorter`;
 }
 
 // ---------- Sets screen ----------
@@ -212,6 +169,7 @@ async function refreshSetList() {
   if (!el) return;
   const sets = (await db.all('sets')).filter((s) => !s.deleted)
     .sort((a, b) => a.set_num.localeCompare(b.set_num, undefined, { numeric: true }));
+  const activeBy = new Map((await bins.loadContext()).active.map((a) => [a.set.set_num, a]));
   $('#listTitle').textContent = sets.length ? `Your sets (${sets.length})` : 'Your sets';
   if (!sets.length) {
     el.innerHTML = '<p class="empty">No sets yet. Add a set number above to get started.</p>';
@@ -224,6 +182,7 @@ async function refreshSetList() {
         <div class="cardtext">
           <div class="cardname">${esc(s.name)}</div>
           <div class="cardmeta">${esc(s.set_num)} · ${esc(s.year)} · ${fmt(s.pieces)} pieces</div>
+          ${activeBy.get(s.set_num) ? `<div class="cardmeta"><span class="binchip">Bin ${activeBy.get(s.set_num).bin.number}</span> ${Math.round(activeBy.get(s.set_num).frac * 100)}% sorted</div>` : ''}
         </div>
         <span class="chev" aria-hidden="true">›</span>
       </a>
@@ -363,6 +322,7 @@ async function renderSet(setNum) {
       <input id="filter" type="search" placeholder="Filter by name, part number or colour" autocomplete="off">
       <div id="partList"></div>
     </section>
+    <section class="panel" id="binPanel"></section>
     <section class="panel actions">
       <button class="btn" id="refreshSet">Refresh from Rebrickable</button>
       <button class="btn danger" id="removeSet">Remove this set</button>
@@ -390,8 +350,13 @@ async function renderSet(setNum) {
   draw('');
   $('#filter').addEventListener('input', (e) => draw(e.target.value));
 
+  await drawBinPanel(rec);
   $('#refreshSet').addEventListener('click', () => refreshSet(rec));
   $('#removeSet').addEventListener('click', async () => {
+    if (rec.status === 'active') {
+      toast('This set has an active bin. Abandon the bin first.');
+      return;
+    }
     const ok = await ask({
       title: 'Remove this set?',
       body: `${rec.set_num} ${rec.name} will be removed from your list. You can add it again later.`,
@@ -403,6 +368,37 @@ async function renderSet(setNum) {
     await db.put('sets', { ...rec, deleted: true, updated: new Date().toISOString() });
     location.hash = '#/';
   });
+}
+
+async function drawBinPanel(rec) {
+  const el = $('#binPanel');
+  const fresh = await db.get('sets', rec.set_num);
+  if (fresh?.status === 'active') {
+    const ctx = await bins.loadContext();
+    const a = ctx.active.find((x) => x.set.set_num === rec.set_num);
+    el.innerHTML = `
+      <h2>Bin ${fresh.active_bin}</h2>
+      <p>${a ? `${fmt(a.heldTotal)} of ${fmt(a.neededTotal)} pieces sorted (${Math.round(a.frac * 100)}%).` : 'Active.'}</p>
+      <div class="actions">
+        <a class="btn" href="#/bin/${encodeURIComponent(fresh.bin_id)}">Open bin</a>
+        <button class="btn danger" id="abandonBin">Abandon bin</button>
+      </div>`;
+    $('#abandonBin').addEventListener('click', async () => {
+      if (await confirmAbandon(fresh.bin_id)) await renderSet(rec.set_num);
+    });
+  } else {
+    el.innerHTML = `
+      <h2>Rebuild this set</h2>
+      <p>Starting it gives the set its own numbered bin. Matching pieces you add will be put in that bin until the set is complete.</p>
+      <button class="btn primary" id="startBin">Start rebuilding this set</button>`;
+    $('#startBin').addEventListener('click', async () => {
+      try {
+        const bin = await bins.activateSet(rec.set_num);
+        toast(`${rec.set_num} now has Bin ${bin.number}.`);
+        await renderSet(rec.set_num);
+      } catch (e) { toast(e.message); }
+    });
+  }
 }
 
 function partRow(l) {
@@ -512,8 +508,8 @@ async function renderSettings() {
 
   $('#wipe').addEventListener('click', async () => {
     const ok = await ask({
-      title: 'Delete all sets and parts?',
-      body: 'Every set and parts list on this device will be removed. Your API key stays.',
+      title: 'Delete everything?',
+      body: 'Every set, bin and sorted piece on this device will be removed. Your API key stays.',
       ok: 'Delete everything',
       danger: true,
     });
@@ -521,7 +517,10 @@ async function renderSettings() {
     await db.clear('setParts');
     await db.clear('sets');
     await db.clear('categories');
-    toast('All sets deleted.');
+    await db.clear('inventory');
+    await db.clear('bins');
+    await bins.ensureDefaultBins();
+    toast('All sets and sorted pieces deleted.');
     await renderSettings();
   });
 }
@@ -541,7 +540,7 @@ view.addEventListener('submit', (e) => {
 });
 
 window.addEventListener('hashchange', route);
-route();
+bins.ensureDefaultBins().catch(() => {}).then(route);
 
 try { navigator.storage?.persist?.(); } catch { /* best effort */ }
 if ('serviceWorker' in navigator) {

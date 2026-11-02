@@ -1,12 +1,14 @@
 // Tiny IndexedDB wrapper with an in-memory fallback (used if the browser blocks storage).
 const DB_NAME = 'brick-sorter';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 const SCHEMA = {
   kv: { keyPath: 'key', indexes: [] },
   sets: { keyPath: 'set_num', indexes: [] },
   setParts: { keyPath: 'id', indexes: [['set_num', 'set_num']] },
   categories: { keyPath: 'id', indexes: [] },
+  bins: { keyPath: 'id', indexes: [] },
+  inventory: { keyPath: 'id', indexes: [['bin_id', 'bin_id']] },
 };
 
 export let persistent = true;

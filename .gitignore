@@ -1,0 +1,22 @@
+# Secrets: never commit keys
+.env
+.env.*
+*.key
+secrets.*
+config.local.*
+
+# Raw Rebrickable downloads (too large for GitHub; keep locally)
+data-raw/
+*.csv.gz
+inventory_parts.csv
+
+# Dependencies and build output
+node_modules/
+dist/
+.cache/
+
+# OS and editor files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

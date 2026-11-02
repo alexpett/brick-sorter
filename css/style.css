@@ -409,3 +409,28 @@ code { font-size: 0.85em; background: var(--bg); padding: 1px 4px; border-radius
 .score { flex: none; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--muted); }
 .result.dim { opacity: 0.7; }
 .scanbtn { margin: 0 0 12px; }
+
+/* ---------- sorter panel ---------- */
+.sorter .selpart { margin-bottom: 12px; }
+.cqrow { display: flex; align-items: center; gap: 12px; }
+.colorbtn {
+  flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; min-height: 52px; padding: 6px 12px; font: inherit; font-weight: 600;
+  color: var(--text); background: var(--bg); border: 1px solid var(--border); border-radius: 12px; cursor: pointer; text-align: left;
+}
+.colorbtn.empty { border-color: var(--accent); color: var(--accent); }
+.colorbtn span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.stepper { flex: none; display: flex; align-items: center; border: 1px solid var(--border); border-radius: 12px; overflow: hidden; background: var(--bg); }
+.stepper button { width: 44px; height: 52px; padding: 0; font: inherit; font-size: 1.4rem; font-weight: 700; color: var(--text); background: none; border: 0; cursor: pointer; }
+.stepper input { width: 52px; height: 52px; padding: 0; text-align: center; font: inherit; font-size: 1.1rem; font-weight: 700; border: 0; border-left: 1px solid var(--border); border-right: 1px solid var(--border); border-radius: 0; background: var(--surface); color: var(--text); }
+.storagehead { margin: 16px 0 8px; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(64px, 1fr)); gap: 6px; }
+.tile { position: relative; display: grid; justify-items: center; gap: 4px; padding: 6px 2px; font: inherit; color: var(--text); background: none; border: 2px solid transparent; border-radius: 14px; cursor: pointer; }
+.tile:disabled { opacity: 0.45; cursor: default; }
+.tile.suggested { border-color: var(--accent); background: var(--bg); }
+.tile .binchip.big { width: 100%; max-width: 72px; height: auto; aspect-ratio: 1; }
+.tilename { font-size: 0.72rem; line-height: 1.15; text-align: center; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; max-width: 100%; }
+.tilebadge { position: absolute; top: 2px; right: 2px; min-width: 22px; padding: 0 6px; border-radius: 999px; background: var(--text); color: var(--bg); font-size: 0.75rem; font-weight: 700; text-align: center; }
+.scan-compact, #scanRoot.compact .viewer { max-height: 18vh; }
+#scanRoot.compact .shutterrow { margin-top: 8px; }
+.cgrid.presets { grid-template-columns: repeat(4, 1fr); max-height: none; }
+input[type="color"] { width: 100%; height: 44px; padding: 2px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); }

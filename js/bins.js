@@ -267,3 +267,21 @@ export async function storageMatches(ctx, setNum) {
   }
   return { lines, pieces };
 }
+
+// ---------- bin colours ----------
+
+export const BIN_COLORS = ['#b3261e', '#d9622b', '#e0a800', '#2e8b4f', '#1f9a9a', '#2a6fc4', '#6a4fc4', '#b0489c', '#7a5a3a', '#5b6b7a', '#222222', '#8a8f98'];
+
+export function chipStyle(bin) {
+  const hex = bin?.color;
+  if (!/^#[0-9a-f]{6}$/i.test(hex || '')) return '';
+  const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
+  const light = (0.299 * r + 0.587 * g + 0.114 * b) > 160;
+  return ` style="background:${hex};color:${light ? '#1d1b1a' : '#ffffff'}"`;
+}
+
+export async function setBinColor(binId, hex) {
+  const bin = await db.get('bins', binId);
+  if (!bin || bin.deleted) throw new Error('Bin not found.');
+  await db.put('bins', { ...bin, color: hex || null, updated: nowIso() });
+}

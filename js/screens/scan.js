@@ -1,13 +1,15 @@
-// Scan: take one photo of one piece; the photo shows at the top and the likely matches below.
+// Scan: take one photo of one piece; the photo shows at the top, the likely matches below,
+// and choosing a match opens the sorting panel on the same screen. Saving returns to the camera.
 import * as refdata from '../data.js';
-import * as bins from '../bins.js';
 import * as recog from '../recog.js';
-import { view, esc, fmt, toast, openDialog, setTitle } from '../ui.js';
-import { choosePartFromScan } from './add.js';
+import { view, esc, toast, openDialog, setTitle } from '../ui.js';
+import { createSorter, info, refreshInfo, loadColorState, partTag } from './sorter.js';
 
 let stream = null;
 let root = null;
 let busy = false;
+let sorter = null;
+let lastItems = [];
 
 export function stopCamera() {
   if (stream) for (const t of stream.getTracks()) t.stop();
@@ -19,10 +21,13 @@ const $r = (sel) => root?.querySelector(sel);
 export async function renderScan() {
   setTitle('Scan a piece');
   busy = false;
+  lastItems = [];
   try { await refdata.loadRef(); } catch (e) {
     view.innerHTML = `<section class="panel"><h2>Couldn't load the parts catalogue</h2><p>${esc(e.message)}</p></section>`;
     return;
   }
+  await refreshInfo();
+  await loadColorState();
   view.innerHTML = `
     <div id="scanRoot">
       <section class="panel scan">
@@ -38,11 +43,17 @@ export async function renderScan() {
           <a class="btn small" href="#/add">Search by hand</a>
         </div>
       </section>
-      <section class="panel" id="matches"><p class="hint">Put one piece in view and press the round button.</p></section>
+      <section class="panel" id="matches"></section>
+      <section class="panel" id="sorterBox" hidden></section>
     </div>`;
   root = view.querySelector('#scanRoot');
+  sorter = createSorter($r('#sorterBox'), {
+    onSaved: () => showLive(),
+    onChangePart: () => { root.classList.remove('compact'); $r('#matches').hidden = false; },
+  });
   root.addEventListener('click', onClick);
   $r('#filePick').addEventListener('change', onFile);
+  showLive();
   await startCamera();
 }
 
@@ -67,12 +78,27 @@ async function startCamera() {
   }
 }
 
+// Back to the live camera, ready for the next piece.
 function showLive() {
+  if (!root?.isConnected) return;
+  sorter?.clear();
+  root.classList.remove('compact');
   $r('#still').hidden = true;
   $r('#cam').hidden = false;
-  $r('#shutter').classList.remove('again');
-  $r('#shutter').setAttribute('aria-label', 'Take photo');
-  $r('#matches').innerHTML = '<p class="hint">Put one piece in view and press the round button.</p>';
+  const sh = $r('#shutter');
+  sh.classList.remove('again');
+  sh.setAttribute('aria-label', 'Take photo');
+  const m = $r('#matches');
+  m.hidden = false;
+  m.innerHTML = '<p class="hint">Put one piece in view and press the round button.</p>';
+  window.scrollTo(0, 0);
+}
+
+async function select(part) {
+  root.classList.add('compact');
+  $r('#matches').hidden = true;
+  await sorter.setPart(part);
+  window.scrollTo(0, 0); // keep the photo in view above the sorting panel
 }
 
 async function onClick(e) {
@@ -85,17 +111,8 @@ async function onClick(e) {
     return;
   }
   const pick = e.target.closest('[data-part]');
-  if (pick) {
-    const p = JSON.parse(pick.dataset.part);
-    choosePartFromScan(p);
-    location.hash = '#/add';
-    return;
-  }
-  const find = e.target.closest('[data-search]');
-  if (find) {
-    choosePartFromScan(null, find.dataset.search);
-    location.hash = '#/add';
-  }
+  if (pick) { await select(JSON.parse(pick.dataset.part)); return; }
+  if (e.target.closest('#unrec')) { await select({ unrec: true, part_num: '', name: 'Unrecognised piece', cat_id: null }); return; }
 }
 
 async function onFile(e) {
@@ -123,6 +140,9 @@ async function handle(source) {
   busy = true;
   const matches = $r('#matches');
   try {
+    sorter.clear();
+    root.classList.remove('compact');
+    matches.hidden = false;
     const { blob, canvas } = await recog.prepare(source);
     const still = $r('#still');
     still.src = canvas.toDataURL('image/jpeg', 0.8);
@@ -134,49 +154,40 @@ async function handle(source) {
     matches.innerHTML = '<p class="working"><span class="spin" aria-hidden="true"></span>Identifying…</p>';
     const res = await recog.identify(blob);
     if (!root?.isConnected) return;
-    await drawMatches(res.items);
+    lastItems = res.items;
+    await refreshInfo();
+    drawMatches(res.items);
   } catch (e) {
-    if (root?.isConnected) matches.innerHTML = `<p class="err-text">${esc(e.message || String(e))}</p><p class="hint">Press the round button to try again.</p>`;
+    if (root?.isConnected) matches.innerHTML = `<p class="err-text">${esc(e.message || String(e))}</p><p class="hint">Press the round button to try again.</p>${unrecButton()}`;
   } finally {
     busy = false;
   }
 }
 
-async function drawMatches(items) {
+const unrecButton = () => '<button class="btn block" id="unrec" type="button">I can’t identify this piece</button>';
+
+function drawMatches(items) {
   const matches = $r('#matches');
   if (!items.length) {
-    matches.innerHTML = '<p class="empty">No matches. Try again with the piece flatter, closer and on a plain background, or search by hand.</p>';
+    matches.innerHTML = `<p class="empty">No matches. Try again with the piece flatter, closer and on a plain background.</p>${unrecButton()}`;
     return;
-  }
-  const ctx = await bins.loadContext();
-  const needed = new Map();
-  for (const a of ctx.active) {
-    for (const [k, need] of a.need) {
-      const pn = k.split('|')[0];
-      if (need - (a.held.get(k) || 0) > 0) {
-        if (!needed.has(pn)) needed.set(pn, new Set());
-        needed.get(pn).add(a.bin.number);
-      }
-    }
   }
   const rows = items.slice(0, 6).map((it) => {
     const idx = refdata.ref.byNum.get(it.id.toLowerCase());
     const part = idx === undefined ? null : { part_num: refdata.ref.parts[idx][0], name: refdata.ref.parts[idx][1], cat_id: refdata.ref.parts[idx][2] };
-    const bn = part && needed.get(part.part_num);
-    const tag = bn ? ` <span class="tag ok">needed: ${[...bn].sort((a, b) => a - b).map((n) => `Bin ${n}`).join(', ')}</span>` : '';
     const score = it.score === null ? '' : `<span class="score">${Math.round(it.score * 100)}%</span>`;
     const inner = `
       <span class="thumb">${it.img ? `<img src="${esc(it.img)}" alt="" loading="lazy">` : ''}</span>
       <span class="pinfo">
         <span class="pname">${esc(part ? part.name : it.name)}</span>
-        <span class="pmeta">${esc(it.id)}${part ? '' : ' · not in the parts catalogue'}${tag}</span>
+        <span class="pmeta">${esc(it.id)}${part ? partTag(part.part_num) : ' · not in the parts catalogue'}</span>
       </span>
       ${score}`;
     return part
       ? `<li><button type="button" class="result" data-part='${esc(JSON.stringify(part))}'>${inner}</button></li>`
-      : `<li><button type="button" class="result dim" data-search="${esc(it.id)}">${inner}</button></li>`;
+      : `<li><button type="button" class="result dim" disabled>${inner}</button></li>`;
   });
   matches.innerHTML = `<h2>Best matches</h2><ul class="parts results">${rows.join('')}</ul>
-    <p class="hint">Tap the right one. Tap the round button to scan another.</p>`;
-  void fmt;
+    <p class="hint">Tap the right one.</p>${unrecButton()}`;
+  void info;
 }

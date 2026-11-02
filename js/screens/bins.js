@@ -30,7 +30,7 @@ export async function renderBins() {
       return `
       <li>
         <a class="card binrow" href="#/bin/${encodeURIComponent(a.bin.id)}">
-          <span class="binchip big">Bin ${a.bin.number}</span>
+          <span class="binchip big"${bins.chipStyle(a.bin)}>Bin ${a.bin.number}</span>
           <div class="cardtext">
             <div class="cardname">${esc(a.set.name)}</div>
             <div class="cardmeta">${esc(a.set.set_num)} · ${fmt(a.heldTotal)} of ${fmt(a.neededTotal)} pieces · ${pct}%</div>
@@ -52,7 +52,7 @@ export async function renderBins() {
       <ul class="cards">${storage.map((b) => `
         <li>
           <a class="card binrow" href="#/bin/${encodeURIComponent(b.id)}">
-            <span class="binchip store big">${esc(b.label.slice(0, 2).toUpperCase())}</span>
+            <span class="binchip store big"${bins.chipStyle(b)}>${esc(b.label.slice(0, 2).toUpperCase())}</span>
             <div class="cardtext">
               <div class="cardname">${esc(b.label)}</div>
               <div class="cardmeta">${fmt(count(b.id))} ${count(b.id) === 1 ? 'piece' : 'pieces'}${b.desc ? ` · ${esc(b.desc)}` : ''}</div>
@@ -189,17 +189,18 @@ export async function renderBin(id, keepMode = false) {
         <h2 class="setname">${esc(a?.set.name || 'Set')}</h2>
         <p class="cardmeta">${esc(bin.set_num)}${a ? ` · ${fmt(a.heldTotal)} of ${fmt(a.neededTotal)} pieces · ${pct}%` : ''}</p>
         <div class="bar solid" aria-hidden="true"><i style="--p:${pct}%"></i></div>
-        <div class="actions"><button class="btn danger" id="abandon">Abandon this bin</button></div>
+        <div class="actions"><button class="btn" id="binColor">Bin colour</button><button class="btn danger" id="abandon">Abandon this bin</button></div>
       </section>`;
   } else if (!isAll) {
     head = `
       <section class="panel">
         <h2 class="setname">${esc(bin.label)}</h2>
         <p class="cardmeta">${fmt(partCount(lines))} ${partCount(lines) === 1 ? 'piece' : 'pieces'}${bin.desc ? ` · ${esc(bin.desc)}` : ''}</p>
-        ${bin.locked ? '' : `<div class="actions">
-          <button class="btn" id="rename">Rename</button>
-          <button class="btn danger" id="delBin">Delete bin</button>
-        </div>`}
+        <div class="actions">
+          <button class="btn" id="binColor">Bin colour</button>
+          ${bin.locked ? '' : `<button class="btn" id="rename">Rename</button>
+          <button class="btn danger" id="delBin">Delete bin</button>`}
+        </div>
       </section>`;
   }
 
@@ -306,6 +307,24 @@ export async function renderBin(id, keepMode = false) {
     if (line && await editLine(line, ctx)) await renderBin(id, true);
   });
 
+  $('#binColor')?.addEventListener('click', async () => {
+    const cur = /^#[0-9a-f]{6}$/i.test(bin.color || '') ? bin.color : '';
+    const { value, data } = await openDialog(`
+      <h2>Bin colour</h2>
+      <div class="cgrid presets">${bins.BIN_COLORS.map((c) => `<button type="submit" class="cswatch" value="${c}" aria-pressed="${c === cur}" aria-label="${c}"><span class="swatch lg" style="--c:${c}"></span></button>`).join('')}</div>
+      <label for="cc">Or pick any colour</label>
+      <input id="cc" name="custom" type="color" value="${cur || '#b3261e'}">
+      <div class="row spread">
+        <button class="btn" value="reset" formnovalidate>Default</button>
+        <span class="grow"></span>
+        <button class="btn" value="cancel" formnovalidate>Cancel</button>
+        <button class="btn primary" value="custom">Use this colour</button>
+      </div>`, { data: true });
+    if (!value || value === 'cancel') return;
+    const hex = value === 'reset' ? null : value === 'custom' ? String(data.get('custom')) : value;
+    await bins.setBinColor(bin.id, hex);
+    await renderBin(id, true);
+  });
   $('#abandon')?.addEventListener('click', async () => {
     if (await confirmAbandon(bin.id)) location.hash = '#/bins';
   });

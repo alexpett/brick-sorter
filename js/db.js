@@ -13,6 +13,14 @@ const SCHEMA = {
 
 export let persistent = true;
 
+// Lets other modules (the sync scheduler) hear about writes. `quiet` mutes it while sync
+// itself is applying records pulled from the sheet.
+const listeners = new Set();
+let quiet = false;
+export const onChange = (fn) => { listeners.add(fn); };
+export const setQuiet = (q) => { quiet = !!q; };
+const notify = (store) => { if (!quiet) for (const fn of listeners) { try { fn(store); } catch { /* ignore */ } } };
+
 const mem = {};
 for (const name of Object.keys(SCHEMA)) mem[name] = new Map();
 
@@ -61,16 +69,15 @@ export async function get(store, key) {
 }
 
 export async function put(store, obj) {
-  if (!(await open())) { mem[store].set(obj[SCHEMA[store].keyPath], obj); return; }
-  await run(store, 'readwrite', (s) => { s.put(obj); });
+  if (!(await open())) mem[store].set(obj[SCHEMA[store].keyPath], obj);
+  else await run(store, 'readwrite', (s) => { s.put(obj); });
+  notify(store);
 }
 
 export async function putMany(store, objs) {
-  if (!(await open())) {
-    for (const o of objs) mem[store].set(o[SCHEMA[store].keyPath], o);
-    return;
-  }
-  await run(store, 'readwrite', (s) => { for (const o of objs) s.put(o); });
+  if (!(await open())) for (const o of objs) mem[store].set(o[SCHEMA[store].keyPath], o);
+  else await run(store, 'readwrite', (s) => { for (const o of objs) s.put(o); });
+  notify(store);
 }
 
 export async function del(store, key) {
@@ -113,7 +120,7 @@ export async function getSetting(key) {
 }
 
 export async function setSetting(key, value) {
-  await put('kv', { key, value });
+  await put('kv', { key, value, updated: new Date().toISOString() });
 }
 
 export async function isPersistent() {

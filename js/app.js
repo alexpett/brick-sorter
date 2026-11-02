@@ -2,11 +2,12 @@ import * as db from './db.js';
 import * as rb from './rebrickable.js';
 
 import * as bins from './bins.js';
+import * as sync from './sync.js';
 import { $, view, esc, decode, fmt, safeRgb, setTitle, toast, openDialog, ask } from './ui.js';
 import { renderAdd } from './screens/add.js';
 import { renderBins, renderBin, confirmAbandon } from './screens/bins.js';
 
-const APP_VERSION = '0.2.0 (stage 2)';
+const APP_VERSION = '0.3.0 (stage 3)';
 
 // ---------- dialogs ----------
 
@@ -462,6 +463,38 @@ async function renderSettings() {
       </form>
       <p class="hint" id="keyStatus" role="status">${key ? 'A key is saved on this device.' : 'No key saved yet.'}</p>
     </section>
+    <section class="panel" id="syncPanel">
+      <h2>Google Sheet backup</h2>
+      <p id="syncSummary"></p>
+      <details class="rules">
+        <summary>How to set it up</summary>
+        <ol class="steps">
+          <li>On a computer, create a new Google Sheet.</li>
+          <li>Open <strong>Extensions &gt; Apps Script</strong> and replace its contents with the script from the <code>apps-script</code> folder of the GitHub repository (open <code>Code.gs</code>, then Raw, and copy it all).</li>
+          <li>Make up a long secret code and put it between the quotes after <code>SECRET_CODE</code>. Use the same code below.</li>
+          <li><strong>Deploy &gt; New deployment &gt; Web app</strong>. Run as: Me. Who has access: Anyone. Approve the permissions (Google shows a warning for your own scripts; use Advanced).</li>
+          <li>Copy the Web app address (it ends in <code>/exec</code>) and paste it below with the secret code, then Test and Save.</li>
+        </ol>
+      </details>
+      <form id="syncForm" autocomplete="off">
+        <label for="syncUrl">Web app address</label>
+        <input id="syncUrl" type="url" inputmode="url" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="https://script.google.com/macros/s/…/exec">
+        <label for="syncToken">Secret code</label>
+        <input id="syncToken" type="password" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false">
+        <div class="row">
+          <button type="button" class="btn" id="makeCode">Make a code</button>
+          <button type="button" class="btn" id="showToken">Show</button>
+          <button type="button" class="btn" id="copyToken">Copy</button>
+        </div>
+        <div class="row">
+          <button type="button" class="btn" id="testSync">Test</button>
+          <button class="btn primary">Save</button>
+        </div>
+      </form>
+      <button class="btn block" id="syncNow">Sync now</button>
+      <p class="hint" id="syncStatus" role="status"></p>
+      <p class="hint">Sets, bins and sorted pieces are backed up. Parts lists are fetched again from Rebrickable on a new device. Your Rebrickable key is never sent to the sheet.</p>
+    </section>
     <section class="panel">
       <h2>Your data</h2>
       <p>${fmt(sets.length)} sets and ${fmt(lineCount)} part lines are stored on this device${
@@ -506,23 +539,166 @@ async function renderSettings() {
     e.target.disabled = false;
   });
 
+  await setupSyncPanel();
+
   $('#wipe').addEventListener('click', async () => {
     const ok = await ask({
       title: 'Delete everything?',
-      body: 'Every set, bin and sorted piece on this device will be removed. Your API key stays.',
+      body: 'Every set, bin and sorted piece will be removed from this device, and from the Google Sheet if backup is on. Your API key stays.',
       ok: 'Delete everything',
       danger: true,
     });
     if (!ok) return;
+    // Soft delete so that, if backup is on, the deletion reaches the sheet too.
+    const now = new Date().toISOString();
+    for (const t of ['sets', 'bins', 'inventory']) {
+      const rows = await db.all(t);
+      await db.putMany(t, rows.map((r) => ({
+        ...r, deleted: true, updated: now,
+        ...(t === 'sets' ? { status: 'catalogued', active_bin: null, bin_id: null, priority: null } : {}),
+      })));
+    }
     await db.clear('setParts');
-    await db.clear('sets');
     await db.clear('categories');
-    await db.clear('inventory');
-    await db.clear('bins');
     await bins.ensureDefaultBins();
     toast('All sets and sorted pieces deleted.');
     await renderSettings();
   });
+}
+
+// ---------- Google Sheet sync ----------
+
+let restoring = false;
+
+// After pulling sets from the sheet (a new device, or after a reset) the parts lists are missing;
+// fetch them again from Rebrickable.
+async function restoreMissingParts() {
+  if (restoring) return 0;
+  const missing = [];
+  for (const s of (await db.all('sets')).filter((x) => !x.deleted)) {
+    if (!(await db.byIndex('setParts', 'set_num', s.set_num)).length) missing.push(s);
+  }
+  if (!missing.length) return 0;
+  const key = await getKey();
+  if (!key) { toast('Sets were restored. Add your Rebrickable key in Settings to download their parts lists.'); return 0; }
+  restoring = true;
+  let done = 0;
+  try {
+    const catMap = await ensureCategories(key);
+    for (const s of missing) {
+      toast(`Downloading parts for ${s.set_num} (${done + 1} of ${missing.length})…`);
+      const info = await rb.getSet(s.set_num, key);
+      const results = await rb.getSetParts(s.set_num, key);
+      await storeSet(info, results, catMap, s);
+      done++;
+    }
+    toast(`Restored ${done} ${done === 1 ? 'set' : 'sets'}.`);
+  } catch (e) {
+    toast(`Could not download all parts lists: ${e.message || e}`);
+  } finally {
+    restoring = false;
+  }
+  return done;
+}
+
+async function afterSync(r) {
+  if (r.pulled) {
+    await restoreMissingParts();
+    const hash = location.hash;
+    if (!/^#\/(add|settings)/.test(hash) && !document.querySelector('dialog[open]')) await route(); // refresh what's on screen
+  }
+}
+
+async function paintSyncPill() {
+  const el = $('#syncState');
+  if (!el) return;
+  const configured = await sync.isConfigured();
+  el.hidden = !configured;
+  if (!configured) return;
+  const st = sync.state;
+  let text = 'Backed up';
+  let cls = 'ok';
+  if (st.running) { text = 'Syncing…'; cls = 'work'; }
+  else if (st.error) { text = 'Sync problem'; cls = 'err'; }
+  else if (st.pending > 0) { text = 'Not backed up yet'; cls = 'warn'; }
+  el.textContent = text;
+  el.className = `pill ${cls}`;
+}
+
+async function setupSyncPanel() {
+  const cfg = await sync.getConfig();
+  $('#syncUrl').value = cfg.url;
+  $('#syncToken').value = cfg.token;
+  const status = $('#syncStatus');
+  const summary = $('#syncSummary');
+  const paint = async () => {
+    const c = await sync.getConfig();
+    const last = await db.getSetting('lastSyncAt');
+    await sync.countPending().catch(() => {});
+    if (!summary.isConnected) return; // the screen changed while we were reading
+    if (!c.url || !c.token) summary.textContent = 'Not set up. Your data is only on this device.';
+    else if (sync.state.error) summary.textContent = `Problem: ${sync.state.error}`;
+    else summary.textContent = `${last ? `Last backed up ${new Date(last).toLocaleString('en-GB')}.` : 'Set up, not backed up yet.'}${sync.state.pending ? ` ${fmt(sync.state.pending)} changes waiting.` : ''}`;
+    $('#syncNow').disabled = !c.url || !c.token || sync.state.running;
+    $('#syncNow').textContent = sync.state.running ? 'Syncing…' : 'Sync now';
+  };
+  await paint();
+  sync.onState(() => { if ($('#syncPanel')) paint(); });
+
+  const read = () => ({ url: $('#syncUrl').value.trim(), token: $('#syncToken').value.trim() });
+  $('#showToken').addEventListener('click', (e) => {
+    const i = $('#syncToken');
+    const show = i.type === 'password';
+    i.type = show ? 'text' : 'password';
+    e.target.textContent = show ? 'Hide' : 'Show';
+  });
+  $('#makeCode').addEventListener('click', () => {
+    $('#syncToken').value = sync.makeSecretCode();
+    $('#syncToken').type = 'text';
+    $('#showToken').textContent = 'Hide';
+    status.textContent = 'New code made. Copy it into SECRET_CODE in the script, then press Save.';
+  });
+  $('#copyToken').addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText($('#syncToken').value);
+      status.textContent = 'Code copied.';
+    } catch { status.textContent = "Couldn't copy. Show the code and copy it by hand."; }
+  });
+  $('#testSync').addEventListener('click', async (e) => {
+    const c = read();
+    if (!c.url || !c.token) { status.textContent = 'Enter the address and the code first.'; return; }
+    e.target.disabled = true;
+    status.textContent = 'Testing…';
+    try {
+      const r = await sync.test(c);
+      status.textContent = `Connected to the sheet “${r.name}”. Press Save to keep these.`;
+    } catch (err) { status.textContent = err.message; }
+    e.target.disabled = false;
+  });
+  $('#syncForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const c = read();
+    const old = await sync.getConfig();
+    await db.setSetting('syncUrl', c.url);
+    await db.setSetting('syncToken', c.token);
+    if (c.url !== old.url) await sync.resetCursor(); // a different sheet needs everything sent
+    status.textContent = c.url && c.token ? 'Saved. Syncing…' : 'Backup turned off.';
+    await paintSyncPill();
+    if (c.url && c.token) await runSync();
+    await paint();
+  });
+  $('#syncNow').addEventListener('click', async () => { await runSync(); await paint(); });
+
+  async function runSync() {
+    try {
+      const r = await sync.syncNow();
+      if (r) {
+        status.textContent = `Done. Sent ${fmt(r.pushed)}, received ${fmt(r.pulled)}.`;
+        await afterSync(r);
+      }
+    } catch (err) { status.textContent = err.message; }
+    await paintSyncPill();
+  }
 }
 
 // ---------- start ----------
@@ -540,7 +716,12 @@ view.addEventListener('submit', (e) => {
 });
 
 window.addEventListener('hashchange', route);
-bins.ensureDefaultBins().catch(() => {}).then(route);
+bins.ensureDefaultBins().catch(() => {}).then(route).then(() => {
+  sync.onState(paintSyncPill);
+  paintSyncPill();
+  sync.startAuto(async (r) => { await afterSync(r); await paintSyncPill(); });
+});
+$('#syncState')?.addEventListener('click', () => { location.hash = '#/settings'; });
 
 try { navigator.storage?.persist?.(); } catch { /* best effort */ }
 if ('serviceWorker' in navigator) {

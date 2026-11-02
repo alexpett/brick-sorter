@@ -74,7 +74,7 @@ h2 { font-size: 1.05rem; margin: 0 0 8px; }
 
 label { display: block; font-weight: 600; margin-bottom: 6px; }
 
-input[type="text"], input[type="search"], input[type="password"], input:not([type]) {
+input[type="text"], input[type="search"], input[type="password"], input[type="url"], input[type="number"], input:not([type]) {
   width: 100%;
   min-height: 46px;
   padding: 10px 12px;
@@ -371,3 +371,16 @@ select { width: 100%; min-height: 44px; font: inherit; color: var(--text); backg
 .notice p { margin: 0 0 6px; }
 .notice .flagrow { margin: 6px 0 0; }
 .part > .btn.small { flex: none; }
+
+/* ---------- stage 3: sync ---------- */
+.top { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.pill {
+  flex: none; padding: 2px 10px; font: inherit; font-size: 0.75rem; font-weight: 700; color: var(--accent-ink);
+  background: rgba(255, 255, 255, 0.2); border: 1px solid rgba(255, 255, 255, 0.5); border-radius: 999px; cursor: pointer;
+}
+.pill[hidden] { display: none; }
+.pill.err { background: #fff; color: var(--danger); border-color: #fff; }
+.pill.warn { background: rgba(255, 255, 255, 0.9); color: #6b3d00; border-color: #fff; }
+ol.steps { padding-left: 1.2em; margin: 8px 0; }
+ol.steps li { margin: 6px 0; }
+code { font-size: 0.85em; background: var(--bg); padding: 1px 4px; border-radius: 4px; }

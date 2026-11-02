@@ -2,6 +2,7 @@
 import * as db from './db.js';
 
 const nowIso = () => new Date().toISOString();
+const EPOCH = '1970-01-01T00:00:00.000Z';
 
 export const uid = () => globalThis.crypto?.randomUUID?.()
   ?? `id-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
@@ -15,8 +16,13 @@ export const STORAGE_DEFAULTS = [
 ];
 
 export async function ensureDefaultBins() {
-  const have = new Set((await db.all('bins')).map((b) => b.id));
+  const existing = await db.all('bins');
+  const have = new Set(existing.map((b) => b.id));
   const now = nowIso();
+  // A wipe soft-deletes the default bins; bring them back.
+  const revive = existing.filter((b) => b.deleted && STORAGE_DEFAULTS.some((d) => d.id === b.id))
+    .map((b) => ({ ...b, deleted: false, updated: now }));
+  if (revive.length) await db.putMany('bins', revive);
   const missing = STORAGE_DEFAULTS.filter((d) => !have.has(d.id)).map((d) => ({
     id: d.id,
     type: 'storage',
@@ -27,7 +33,7 @@ export async function ensureDefaultBins() {
     number: null,
     set_num: null,
     created: now,
-    updated: now,
+    updated: EPOCH, // oldest possible, so a version restored from the sheet always wins
     deleted: false,
   }));
   if (missing.length) await db.putMany('bins', missing);

@@ -7,7 +7,7 @@ A phone web app for sorting a loose LEGO collection back into sets.
 - Add pieces with a LEGO colour picker; the app says which bin each piece belongs in
 - Everything stays on your phone, with a Google Sheet as backup
 
-Status: stages 1 (set catalogue), 2 (manual inventory and bins) and 3 (Google Sheet backup) are built. See the build stages below.
+Status: stages 1 (set catalogue), 2 (manual inventory and bins) 3 (Google Sheet backup), 4 (pick list) and 5 (camera) are built. See the build stages below.
 
 ## Build stages
 

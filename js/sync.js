@@ -52,6 +52,13 @@ async function call(cfg, payload) {
   return json;
 }
 
+// Sends any request to the user's Apps Script (used by the camera as a fallback route).
+export async function callScript(payload) {
+  const cfg = await getConfig();
+  if (!cfg.url || !cfg.token) throw new Error('Google Sheet backup is not set up.');
+  return call(cfg, payload);
+}
+
 export async function test(cfg) {
   return call(cfg, { action: 'ping' });
 }

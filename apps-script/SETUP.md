@@ -27,6 +27,10 @@ From then on the app backs up a few seconds after each change, when you open it,
 
 "Anyone" access means the web app address can be reached by anyone who has it, but every request must carry your secret code. Treat the address and the code like a password, and never put them in the repository. To rotate the code, change `SECRET_CODE`, choose **Deploy > Manage deployments > Edit > New version > Deploy**, and enter the new code in the app.
 
+## Camera fallback
+
+The camera first tries to send photos to Brickognize straight from the browser. If the browser blocks that, the app sends the photo through this script instead, which forwards it from Google's servers. For that you need the current `Code.gs` deployed as a new version (see below). The photo is not stored in the sheet.
+
 ## Changing the script later
 
 After editing the script, choose **Deploy > Manage deployments**, edit the deployment, pick **New version** and deploy. The address stays the same.

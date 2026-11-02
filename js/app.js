@@ -5,6 +5,7 @@ import * as bins from './bins.js';
 import * as sync from './sync.js';
 import { $, view, esc, decode, fmt, safeRgb, setTitle, toast, openDialog, ask } from './ui.js';
 import { renderAdd } from './screens/add.js';
+import { renderScan, stopCamera } from './screens/scan.js';
 import { renderBins, renderBin, confirmAbandon } from './screens/bins.js';
 
 const APP_VERSION = '0.3.0 (stage 3)';
@@ -112,6 +113,7 @@ const routes = {
   '': renderSets,
   set: renderSet,
   add: renderAdd,
+  scan: renderScan,
   bins: renderBins,
   bin: renderBin,
   settings: renderSettings,
@@ -119,8 +121,9 @@ const routes = {
 
 async function route() {
   const [, page = '', arg] = (location.hash.slice(1) || '/').split('/');
+  stopCamera();
   const handler = routes[page] || renderSets;
-  const tab = { add: 'add', bins: 'bins', bin: 'bins', settings: 'settings' }[page] || 'sets';
+  const tab = { add: 'add', scan: 'add', bins: 'bins', bin: 'bins', settings: 'settings' }[page] || 'sets';
   document.querySelectorAll('.tabs a').forEach((a) => {
     a.classList.toggle('active', a.dataset.tab === tab);
     if (a.dataset.tab === tab) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current');

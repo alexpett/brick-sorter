@@ -23,7 +23,19 @@ const S = {
   pickerOpen: true,
   q: '',
   colorFilter: '',
+  fromScan: false,
 };
+
+// Called by the Scan screen: carry a chosen part (or a text to search for) into the Add flow.
+export function choosePartFromScan(part, query = '') {
+  S.part = part;
+  S.q = query;
+  S.qty = '';
+  S.note = '';
+  S.flags = { sticker: false, printed: false, other: false };
+  handoff = true;
+}
+let handoff = false;
 
 let ctx = null;
 let yours = new Set();
@@ -61,6 +73,8 @@ async function refreshContext() {
 }
 
 export async function renderAdd() {
+  S.fromScan = handoff; // only true when we arrive from the Scan screen
+  handoff = false;
   setTitle('Add pieces');
   view.innerHTML = '<p class="empty">Loading the parts catalogue…</p>';
   try {
@@ -128,6 +142,7 @@ function drawPart() {
   }
   el.innerHTML = `
     <h2>1. Find the part</h2>
+    <a class="btn primary block scanbtn" href="#/scan">Scan a piece with the camera</a>
     <label for="q" class="sr">Search parts</label>
     <input id="q" type="search" placeholder="Part number or words, e.g. 3001 or plate 2 x 4" autocomplete="off" autocapitalize="off" spellcheck="false">
     <div id="results" aria-live="polite"></div>
@@ -379,6 +394,7 @@ async function save() {
     S.note = '';
     S.flags = { sticker: false, printed: false, other: false };
     await refreshContext();
+    if (S.fromScan) { location.hash = '#/scan'; return; } // straight back to the camera for the next piece
     drawAll();
   } catch (e) {
     toast(e.message || 'Could not save.');
@@ -410,7 +426,7 @@ async function onClick(e) {
     return;
   }
   switch (t.id) {
-    case 'changePart': S.part = null; drawAll(); break;
+    case 'changePart': S.part = null; S.fromScan = false; drawAll(); break;
     case 'unrec':
       S.part = { unrec: true, part_num: '', name: 'Unrecognised piece', cat_id: null };
       S.flags = { sticker: false, printed: false, other: false };

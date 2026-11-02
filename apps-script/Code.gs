@@ -43,6 +43,7 @@ function doPost(e) {
 function handle(body) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   if (body.action === 'ping') return { ok: true, name: ss.getName() };
+  if (body.action === 'recognise') return recognise(body);
 
   const props = PropertiesService.getScriptProperties();
   let seq = Number(props.getProperty('seq') || 0);
@@ -86,6 +87,21 @@ function handle(body) {
 
   props.setProperty('seq', String(seq));
   return { ok: true, seq: seq, changes: pulled };
+}
+
+// Camera fallback: forwards a photo to Brickognize from Google's servers, in case the browser
+// is not allowed to call Brickognize directly. The photo is not stored in the sheet.
+function recognise(body) {
+  const blob = Utilities.newBlob(Utilities.base64Decode(String(body.image || '')), 'image/jpeg', 'photo.jpg');
+  const res = UrlFetchApp.fetch('https://api.brickognize.com/predict/parts/', {
+    method: 'post',
+    payload: { query_image: blob },
+    muteHttpExceptions: true,
+  });
+  const status = res.getResponseCode();
+  let result = null;
+  try { result = JSON.parse(res.getContentText()); } catch (err) { /* not JSON */ }
+  return { ok: status === 200 && !!result, status: status, result: result, error: status === 200 ? '' : 'Brickognize answered with status ' + status };
 }
 
 function keyOf(table, rec) {

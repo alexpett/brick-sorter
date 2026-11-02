@@ -1,5 +1,5 @@
 // Caches the app shell so Brick Sorter opens offline. Rebrickable calls are never cached here.
-const CACHE = 'brick-sorter-v3';
+const CACHE = 'brick-sorter-v4';
 const SHELL = [
   './',
   'index.html',
@@ -32,22 +32,20 @@ self.addEventListener('activate', (event) => {
   );
 });
 
-// Stale-while-revalidate for our own files: instant load, refreshed in the background.
+// Network first for our own files, so an update is picked up on the next open and the
+// app's files never come from two different versions. The cache is only the offline fallback.
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
   if (event.request.method !== 'GET' || url.origin !== self.location.origin) return;
   event.respondWith(
-    caches.match(event.request).then((hit) => {
-      const network = fetch(event.request)
-        .then((res) => {
-          if (res.ok) {
-            const copy = res.clone();
-            caches.open(CACHE).then((c) => c.put(event.request, copy));
-          }
-          return res;
-        })
-        .catch(() => hit);
-      return hit || network;
-    }),
+    fetch(event.request)
+      .then((res) => {
+        if (res.ok) {
+          const copy = res.clone();
+          caches.open(CACHE).then((c) => c.put(event.request, copy));
+        }
+        return res;
+      })
+      .catch(() => caches.match(event.request).then((hit) => hit || caches.match('index.html'))),
   );
 });

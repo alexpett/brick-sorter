@@ -1,7 +1,7 @@
 import * as db from './db.js';
 import * as rb from './rebrickable.js';
 
-const APP_VERSION = '0.1.0 (stage 1)';
+const APP_VERSION = '0.1.1 (stage 1)';
 
 const $ = (sel, root = document) => root.querySelector(sel);
 const view = $('#view');
@@ -240,12 +240,19 @@ function logLine(token) {
   const li = document.createElement('li');
   log.appendChild(li);
   const api = {
-    set(text, state = 'work') {
+    // state: 'queued' | 'work' | 'ok' | 'err' | 'skip'. While working, a spinner and a progress
+    // bar are shown; progress is 0 to 1 when known, otherwise the bar is indeterminate.
+    set(text, state = 'work', progress = null) {
       li.className = state;
-      li.innerHTML = `<strong>${esc(token)}</strong> ${esc(text)}`;
+      const working = state === 'work';
+      const known = working && typeof progress === 'number';
+      const bar = working
+        ? `<div class="bar${known ? '' : ' indet'}" aria-hidden="true"><i${known ? ` style="--p:${Math.round(Math.min(1, progress) * 100)}%"` : ''}></i></div>`
+        : '';
+      li.innerHTML = `${working ? '<span class="spin" aria-hidden="true"></span>' : ''}<strong>${esc(token)}</strong> ${esc(text)}${bar}`;
     },
   };
-  api.set('waiting…');
+  api.set('waiting in line…', 'queued');
   return api;
 }
 
@@ -280,11 +287,17 @@ async function addOne(token, line, key) {
     return;
   }
 
-  line.set(`downloading parts for ${decode(info.name)}…`);
+  line.set('getting the part categories…');
   const catMap = await ensureCategories(key);
+  line.set(`downloading parts for ${decode(info.name)}…`, 'work', 0);
   const results = await rb.getSetParts(info.set_num, key, (n, total) => {
-    line.set(`downloading parts… ${fmt(n)}${total ? ` of ${fmt(total)}` : ''}`);
+    line.set(
+      `downloading parts… ${fmt(n)}${total ? ` of ${fmt(total)}` : ''}`,
+      'work',
+      total ? n / total : null,
+    );
   });
+  line.set('saving to this device…');
   const rec = await storeSet(info, results, catMap, dup);
   line.set(`added ${decode(info.name)}: ${fmt(rec.line_count)} part types, ${fmt(rec.pieces)} pieces`, 'ok');
 }
@@ -298,10 +311,13 @@ async function addSets(text) {
 
   adding = true;
   const btn = $('#addBtn');
-  if (btn) btn.disabled = true;
+  if (btn) { btn.disabled = true; btn.textContent = 'Adding…'; }
+  const log = $('#addLog');
+  if (log) { log.innerHTML = ''; log.setAttribute('aria-busy', 'true'); }
   rb.setThrottleHook((secs) => toast(`Rebrickable asked us to wait ${secs} second${secs === 1 ? '' : 's'}…`));
-  for (const token of tokens) {
-    const line = logLine(token);
+  const queue = tokens.map((token) => ({ token, line: logLine(token) }));
+  for (const { token, line } of queue) {
+    line.set('starting…');
     try {
       await addOne(token, line, key);
     } catch (e) {
@@ -312,7 +328,8 @@ async function addSets(text) {
   rb.setThrottleHook(null);
   adding = false;
   const b2 = $('#addBtn');
-  if (b2) b2.disabled = false;
+  if (b2) { b2.disabled = false; b2.textContent = 'Add'; }
+  $('#addLog')?.removeAttribute('aria-busy');
 }
 
 // ---------- Set detail ----------

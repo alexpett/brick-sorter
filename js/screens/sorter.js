@@ -57,6 +57,19 @@ export function thumb(partNum, cid) {
   return `<span class="thumb">${url ? `<img src="${esc(url)}" alt="" loading="lazy">` : ''}</span>`;
 }
 
+// Colours of this part that active sets still need, most pieces remaining first, ties alphabetical.
+export function colourSuggestions(partNum) {
+  const by = new Map();
+  for (const e of info.neededBy.get(partNum) || []) {
+    if (e.rem <= 0 || !colorOf(e.colorId)) continue;
+    if (!by.has(e.colorId)) by.set(e.colorId, { id: e.colorId, rem: 0, bins: new Set() });
+    const x = by.get(e.colorId);
+    x.rem += e.rem;
+    x.bins.add(e.bin.number);
+  }
+  return [...by.values()].sort((a, b) => b.rem - a.rem || colorOf(a.id).name.localeCompare(colorOf(b.id).name));
+}
+
 const swatchHtml = (c, extra = '') => `<span class="swatch${c.is_trans ? ' trans' : ''}${extra}" style="--c:#${esc(c.rgb)}"></span>`;
 
 // ---------- colour picker (a dialog) ----------
@@ -145,6 +158,19 @@ export function createSorter(el, { onSaved, onChangePart } = {}) {
     return { dest, needsRule: storageQty > 0 && !storageBin, allocations, leftover: storageQty };
   }
 
+  function suggestionsHtml() {
+    if (!st.part || st.part.unrec) return '';
+    const list = colourSuggestions(st.part.part_num);
+    if (!list.length) return '';
+    return `<div class="suggest">
+      <p class="suggest-label">Needed by your sets — tap to use</p>
+      <div class="flagrow">${list.map((c) => {
+        const col = colorOf(c.id);
+        return `<button type="button" class="chip" data-usecolor="${c.id}" aria-pressed="${c.id === colorId}">${swatchHtml(col)} ${esc(col.name)} · ${fmt(c.rem)} <small>${[...c.bins].sort((a, b) => a - b).map((n) => `Bin ${n}`).join(', ')}</small></button>`;
+      }).join('')}</div>
+    </div>`;
+  }
+
   function renderTop() {
     const p = st.part;
     if (!p) { el.hidden = true; el.innerHTML = ''; return; }
@@ -169,6 +195,7 @@ export function createSorter(el, { onSaved, onChangePart } = {}) {
           <button type="button" id="qtyPlus" aria-label="One more">+</button>
         </div>
       </div>
+      ${suggestionsHtml()}
       <div class="flagrow" role="group" aria-label="Flags">
         ${FLAGS.map(([id, label]) => `<button type="button" class="chip" data-flag="${id}" aria-pressed="${st.flags[id]}">${esc(label)}</button>`).join('')}
       </div>
@@ -227,13 +254,6 @@ export function createSorter(el, { onSaved, onChangePart } = {}) {
       note = `<p class="hint">Suggested split: ${sug.dest.map((d) => `${fmt(d.qty)} → ${esc(lbl(d.binId))}`).join(', ')}. <button type="button" class="linkbtn" id="useSplit">Use this split</button></p>`;
     } else if (sug?.needsRule) {
       note = `<p class="hint">No storage rule for this part yet. Tap a storage bin and the app will remember it for ${st.part.cat_id != null ? `every part in “${esc(refdata.categoryName(st.part.cat_id))}”` : 'this part'}.</p>`;
-    } else if (sug && !sug.allocations.length && !st.part.unrec) {
-      // Not wanted by any active set: say why when the part is in one but another colour is needed.
-      const open = (info.neededBy.get(st.part.part_num) || []).filter((e) => e.rem > 0 && colorOf(e.colorId));
-      if (open.length) {
-        note = `<div class="notice"><p>${esc(colorOf(colorId)?.name || 'This colour')} isn't needed by an active set. This part is needed in:</p>
-          <div class="flagrow">${open.map((e) => `<button type="button" class="chip" data-usecolor="${e.colorId}">${swatchHtml(colorOf(e.colorId))} ${esc(colorOf(e.colorId).name)} · Bin ${e.bin.number} (${fmt(e.rem)})</button>`).join('')}</div></div>`;
-      }
     }
     box.innerHTML = `${note}<div class="tiles">${[...active, ...storage].map(tile).join('')}</div>`;
   }

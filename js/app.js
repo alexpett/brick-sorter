@@ -124,6 +124,7 @@ async function route() {
   stopCamera();
   const handler = routes[page] || renderSets;
   const tab = { add: 'add', scan: 'add', bins: 'bins', bin: 'bins', settings: 'settings' }[page] || 'sets';
+  $('#cog')?.classList.toggle('active', tab === 'settings');
   document.querySelectorAll('.tabs a').forEach((a) => {
     a.classList.toggle('active', a.dataset.tab === tab);
     if (a.dataset.tab === tab) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current');
@@ -174,6 +175,7 @@ async function refreshSetList() {
   const sets = (await db.all('sets')).filter((s) => !s.deleted)
     .sort((a, b) => a.set_num.localeCompare(b.set_num, undefined, { numeric: true }));
   const activeBy = new Map((await bins.loadContext()).active.map((a) => [a.set.set_num, a]));
+  if (!el.isConnected || !$('#listTitle')) return; // the screen changed while we were loading
   $('#listTitle').textContent = sets.length ? `Your sets (${sets.length})` : 'Your sets';
   if (!sets.length) {
     el.innerHTML = '<p class="empty">No sets yet. Add a set number above to get started.</p>';

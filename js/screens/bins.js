@@ -18,7 +18,7 @@ function tagsHtml(l) {
 // ---------- Bins list ----------
 
 export async function renderBins() {
-  setTitle('Bins');
+  setTitle('Store');
   await refdata.loadRef().catch(() => {});
   const ctx = await bins.loadContext();
   const count = (id) => partCount(ctx.byBin.get(id) || []);

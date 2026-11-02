@@ -11,7 +11,7 @@ let query = '';
 const $r = (sel) => root.querySelector(sel);
 
 export async function renderAdd() {
-  setTitle('Add pieces');
+  setTitle('Log pieces');
   view.innerHTML = '<p class="empty">Loading the parts catalogue…</p>';
   try {
     await refdata.loadRef();

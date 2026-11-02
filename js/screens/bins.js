@@ -134,9 +134,10 @@ async function drawRules() {
 // ---------- One bin (or all pieces) ----------
 
 let binMode = 'missing'; // 'missing' | 'found' for active bins
+let pickOnly = false; // missing list: only pieces that are sitting in storage
 
 export async function renderBin(id, keepMode = false) {
-  if (!keepMode) binMode = 'missing';
+  if (!keepMode) { binMode = 'missing'; pickOnly = false; }
   const ctx = await bins.loadContext();
   const isAll = id === 'all';
   const bin = isAll ? null : ctx.bins.find((b) => b.id === id);
@@ -160,7 +161,22 @@ export async function renderBin(id, keepMode = false) {
       .map((l) => ({ ...l, rem: l.qty - l.have }))
       .filter((l) => l.rem > 0)
       .sort((a, b) => a.cat_name.localeCompare(b.cat_name) || a.name.localeCompare(b.name) || String(a.color_name).localeCompare(String(b.color_name)));
+    // Matching pieces already sitting in storage bins (the pick list).
+    const stock = new Map();
+    for (const b of ctx.bins.filter((x) => x.type === 'storage')) {
+      for (const l of ctx.byBin.get(b.id) || []) {
+        if (!l.part_num) continue;
+        const k = `${l.part_num}|${l.color_id}`;
+        if (!stock.has(k)) stock.set(k, []);
+        stock.get(k).push({ line: l, bin: b });
+      }
+    }
+    for (const m of missing) {
+      m.stock = stock.get(`${m.part_num}|${m.color_id}`) || [];
+      m.avail = m.stock.reduce((n, x) => n + x.line.qty, 0);
+    }
   }
+  const pickCount = missing.filter((m) => m.avail > 0).length;
   const missingCount = missing.reduce((n, l) => n + l.rem, 0);
   setTitle(isAll ? 'All pieces' : bin.type === 'active' ? `Bin ${bin.number}` : bin.label);
 
@@ -194,7 +210,8 @@ export async function renderBin(id, keepMode = false) {
       ${isActive ? `<div class="segmented" role="tablist">
         <button type="button" role="tab" data-mode="missing" aria-selected="${binMode === 'missing'}">Missing (${fmt(missingCount)})</button>
         <button type="button" role="tab" data-mode="found" aria-selected="${binMode === 'found'}">Found (${fmt(partCount(lines))})</button>
-      </div>` : ''}
+ </div>
+      ${binMode === 'missing' && pickCount ? `<button type="button" class="chip pickchip" id="pickToggle" aria-pressed="${pickOnly}">In storage: ${fmt(pickCount)} ${pickCount === 1 ? 'part' : 'parts'} to pick</button>` : ''}` : ''}
       <label for="filter" class="sr">Filter pieces</label>
       <input id="filter" type="search" placeholder="Filter by name, part number or colour" autocomplete="off">
       <p class="hint" id="count"></p>
@@ -206,7 +223,8 @@ export async function renderBin(id, keepMode = false) {
   const draw = (q) => {
     const needle = q.trim().toLowerCase();
     if (isActive && binMode === 'missing') {
-      const shown = needle ? missing.filter((l) => match(l, needle)) : missing;
+      const pool = pickOnly ? missing.filter((l) => l.avail > 0) : missing;
+      const shown = needle ? pool.filter((l) => match(l, needle)) : pool;
       $('#count').textContent = missing.length
         ? `${pl(shown.reduce((n, l) => n + l.rem, 0), 'piece', 'pieces')} in ${pl(shown.length, 'line', 'lines')} still missing`
         : '';
@@ -223,10 +241,14 @@ export async function renderBin(id, keepMode = false) {
               <span class="swatch${l.is_trans ? ' trans' : ''}" style="--c:#${esc(l.rgb)}"></span>
               ${esc(l.color_name)} · ${esc(l.part_num)}${l.sticker ? ' <span class="tag">sticker</span>' : ''}
               ${l.have ? `<br>Have ${fmt(l.have)} of ${fmt(l.qty)}` : ''}
+              ${l.avail ? `<br><span class="tag ok">In storage: ${fmt(l.avail)} · ${esc([...new Set(l.stock.map((x) => x.bin.label))].join(', '))}</span>` : ''}
             </span>
           </span>
           <span class="qty">${fmt(l.rem)}</span>
-          <button type="button" class="btn small" data-found="${esc(l.id)}">Found</button>
+          <span class="btns">
+            ${l.avail ? `<button type="button" class="btn small primary" data-take="${esc(l.id)}">Take ${fmt(Math.min(l.rem, l.avail))}</button>` : ''}
+            <button type="button" class="btn small" data-found="${esc(l.id)}">Found</button>
+          </span>
         </li>`).join('')}</ul>`;
       return;
     }
@@ -264,7 +286,14 @@ export async function renderBin(id, keepMode = false) {
     binMode = m.dataset.mode;
     renderBin(id, true);
   });
+  $('#pickToggle')?.addEventListener('click', () => { pickOnly = !pickOnly; renderBin(id, true); });
   listEl.addEventListener('click', async (e) => {
+    const tb = e.target.closest('[data-take]');
+    if (tb) {
+      const row = missing.find((l) => l.id === tb.dataset.take);
+      if (row && await takeFromStorage(row, bin)) await renderBin(id, true);
+      return;
+    }
     const fb = e.target.closest('[data-found]');
     if (fb) {
       const row = missing.find((l) => l.id === fb.dataset.found);
@@ -355,6 +384,45 @@ async function markFound(row, bin) {
     items: [{ binId: bin.id, qty }],
   });
   toast(`Found: ${fmt(qty)} × ${row.name}`);
+  return true;
+}
+
+// Moves pieces from storage bins into this active bin.
+async function takeFromStorage(row, bin) {
+  const max = Math.min(row.rem, row.avail);
+  let qty = max;
+  if (max > 1) {
+    const { value, data } = await openDialog(`
+      <h2>${esc(row.name)}</h2>
+      <p class="hint">${esc(row.color_name)} · ${esc(row.part_num)} · ${fmt(row.avail)} in storage, ${fmt(row.rem)} needed</p>
+      <label for="tq">How many are you taking out of storage?</label>
+      <input id="tq" name="qty" type="number" inputmode="numeric" min="1" max="${max}" step="1" required value="${max}">
+      <div class="row">
+        <button class="btn" value="cancel" formnovalidate>Cancel</button>
+        <button class="btn primary" value="ok">Move to Bin ${bin.number}</button>
+      </div>`, { data: true });
+    if (value !== 'ok') return false;
+    qty = Number(data.get('qty'));
+    if (!Number.isInteger(qty) || qty < 1 || qty > max) { toast(`Enter a number from 1 to ${max}.`); return false; }
+  }
+  const now = new Date().toISOString();
+  let left = qty;
+  for (const { line } of row.stock) {
+    if (left <= 0) break;
+    const take = Math.min(left, line.qty);
+    await db.put('inventory', take === line.qty
+      ? { ...line, qty: 0, deleted: true, updated: now }
+      : { ...line, qty: line.qty - take, updated: now });
+    left -= take;
+  }
+  await bins.saveToBins({
+    part: { part_num: row.part_num, name: row.name, cat_id: row.cat_id },
+    color: { id: row.color_id, name: row.color_name, rgb: row.rgb },
+    flags: { sticker: !!row.sticker, printed: false, other: false },
+    note: '',
+    items: [{ binId: bin.id, qty }],
+  });
+  toast(`Moved ${fmt(qty)} × ${row.name} to Bin ${bin.number}`);
   return true;
 }
 

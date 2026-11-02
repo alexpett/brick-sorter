@@ -248,3 +248,22 @@ export async function deleteStorageBin(binId) {
   if ((await binLines(binId)).length) throw new Error('Empty the bin before deleting it.');
   await db.put('bins', { ...bin, deleted: true, updated: nowIso() });
 }
+
+// How much of a set's parts list is already sitting in storage bins (for the pick list).
+export async function storageMatches(ctx, setNum) {
+  const stock = new Map();
+  for (const b of ctx.bins.filter((x) => x.type === 'storage')) {
+    for (const l of ctx.byBin.get(b.id) || []) {
+      if (!l.part_num) continue;
+      const k = `${l.part_num}|${l.color_id}`;
+      stock.set(k, (stock.get(k) || 0) + l.qty);
+    }
+  }
+  let lines = 0;
+  let pieces = 0;
+  for (const p of await db.byIndex('setParts', 'set_num', setNum)) {
+    const have = Math.min(p.qty, stock.get(`${p.part_num}|${p.color_id}`) || 0);
+    if (have > 0) { lines++; pieces += have; }
+  }
+  return { lines, pieces };
+}

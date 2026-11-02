@@ -395,7 +395,10 @@ async function drawBinPanel(rec) {
     $('#startBin').addEventListener('click', async () => {
       try {
         const bin = await bins.activateSet(rec.set_num);
-        toast(`${rec.set_num} now has Bin ${bin.number}.`);
+        const m = await bins.storageMatches(await bins.loadContext(), rec.set_num);
+        toast(m.pieces
+          ? `${rec.set_num} now has Bin ${bin.number}. ${fmt(m.pieces)} matching pieces are already in storage: see Missing in the bin.`
+          : `${rec.set_num} now has Bin ${bin.number}.`);
         await renderSet(rec.set_num);
       } catch (e) { toast(e.message); }
     });

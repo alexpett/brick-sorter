@@ -384,3 +384,7 @@ select { width: 100%; min-height: 44px; font: inherit; color: var(--text); backg
 ol.steps { padding-left: 1.2em; margin: 8px 0; }
 ol.steps li { margin: 6px 0; }
 code { font-size: 0.85em; background: var(--bg); padding: 1px 4px; border-radius: 4px; }
+
+/* ---------- stage 4: pick list ---------- */
+.btns { display: grid; gap: 6px; flex: none; }
+.pickchip { margin: 0 0 10px; }

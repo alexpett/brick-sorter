@@ -4,6 +4,8 @@ import * as refdata from '../data.js';
 import * as bins from '../bins.js';
 import { view, esc, fmt, toast, openDialog, setTitle } from '../ui.js';
 
+const MAX_RECENT = 6;
+
 const FLAGS = [
   ['sticker', 'Sticker'],
   ['printed', 'Printed part'],
@@ -70,7 +72,7 @@ export async function renderAdd() {
   await refreshContext();
   const last = await db.getSetting('lastColor');
   if (S.colorId == null && last != null) S.colorId = last;
-  recent = (await db.getSetting('recentColors')) || [];
+  recent = ((await db.getSetting('recentColors')) || []).slice(0, MAX_RECENT);
   S.tab = recent.length ? 'recent' : 'yours';
   S.pickerOpen = S.colorId == null;
 
@@ -223,7 +225,7 @@ async function chooseColor(id) {
   S.colorId = id;
   S.pickerOpen = false;
   S.colorFilter = '';
-  recent = [id, ...recent.filter((x) => x !== id)].slice(0, 8);
+  recent = [id, ...recent.filter((x) => x !== id)].slice(0, MAX_RECENT);
   await db.setSetting('lastColor', id);
   await db.setSetting('recentColors', recent);
   drawColor();

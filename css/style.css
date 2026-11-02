@@ -327,12 +327,12 @@ dialog .row { justify-content: flex-end; }
 }
 .segmented button[aria-selected="true"] { color: var(--accent-ink); background: var(--accent); border-color: var(--accent); }
 
-.cgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: 6px; margin-top: 10px; max-height: 46vh; overflow-y: auto; }
+.cgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: 6px; margin-top: 10px; max-height: 46vh; overflow-y: auto; padding: 2px; }
 .cswatch {
   display: grid; justify-items: center; gap: 4px; padding: 8px 4px; font: inherit; color: var(--text);
   background: var(--surface); border: 1px solid var(--border); border-radius: 10px; cursor: pointer;
 }
-.cswatch[aria-pressed="true"] { outline: 3px solid var(--accent); }
+.cswatch[aria-pressed="true"] { border-color: var(--accent); box-shadow: inset 0 0 0 2px var(--accent); }
 .cswatch .cn { font-size: 0.75rem; line-height: 1.15; text-align: center; overflow-wrap: anywhere; }
 .swatch.lg { width: 32px; height: 32px; margin: 0; border-radius: 8px; }
 .curcolor { display: flex; align-items: center; gap: 12px; }

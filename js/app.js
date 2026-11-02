@@ -317,12 +317,12 @@ async function renderSet(setNum) {
         <p class="hint">${rec.spares ? `${fmt(rec.spares)} spare pieces are not counted. ` : ''}Minifigures are not included.</p>
       </div>
     </section>
+    <section class="panel" id="binPanel"></section>
     <section class="panel">
       <label for="filter" class="sr">Filter parts</label>
       <input id="filter" type="search" placeholder="Filter by name, part number or colour" autocomplete="off">
       <div id="partList"></div>
     </section>
-    <section class="panel" id="binPanel"></section>
     <section class="panel actions">
       <button class="btn" id="refreshSet">Refresh from Rebrickable</button>
       <button class="btn danger" id="removeSet">Remove this set</button>

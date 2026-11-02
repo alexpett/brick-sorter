@@ -5,6 +5,7 @@ import * as bins from '../bins.js';
 import { view, esc, fmt, toast, openDialog, ask, setTitle } from '../ui.js';
 
 const partCount = (lines) => bins.sumQty(lines);
+const pl = (n, one, many) => `${fmt(n)} ${n === 1 ? one : many}`;
 
 function tagsHtml(l) {
   const t = [];
@@ -132,7 +133,10 @@ async function drawRules() {
 
 // ---------- One bin (or all pieces) ----------
 
-export async function renderBin(id) {
+let binMode = 'missing'; // 'missing' | 'found' for active bins
+
+export async function renderBin(id, keepMode = false) {
+  if (!keepMode) binMode = 'missing';
   const ctx = await bins.loadContext();
   const isAll = id === 'all';
   const bin = isAll ? null : ctx.bins.find((b) => b.id === id);
@@ -146,6 +150,18 @@ export async function renderBin(id) {
   lines.sort((a, b) => (a.name || '').localeCompare(b.name || '') || a.color_name.localeCompare(b.color_name));
 
   const title = isAll ? 'All pieces' : bins.binLabel(bin, ctx.setsByNum);
+  const isActive = !isAll && bin.type === 'active';
+  let missing = [];
+  if (isActive) {
+    const held = new Map();
+    for (const l of lines) held.set(`${l.part_num}|${l.color_id}`, (held.get(`${l.part_num}|${l.color_id}`) || 0) + l.qty);
+    missing = (await db.byIndex('setParts', 'set_num', bin.set_num))
+      .map((l) => ({ ...l, have: held.get(`${l.part_num}|${l.color_id}`) || 0 }))
+      .map((l) => ({ ...l, rem: l.qty - l.have }))
+      .filter((l) => l.rem > 0)
+      .sort((a, b) => a.cat_name.localeCompare(b.cat_name) || a.name.localeCompare(b.name) || String(a.color_name).localeCompare(String(b.color_name)));
+  }
+  const missingCount = missing.reduce((n, l) => n + l.rem, 0);
   setTitle(isAll ? 'All pieces' : bin.type === 'active' ? `Bin ${bin.number}` : bin.label);
 
   let head = '';
@@ -173,8 +189,12 @@ export async function renderBin(id) {
 
   view.innerHTML = `
     <a class="backlink" href="#/bins">‹ All bins</a>
-    ${head}
+ ${head}
     <section class="panel">
+      ${isActive ? `<div class="segmented" role="tablist">
+        <button type="button" role="tab" data-mode="missing" aria-selected="${binMode === 'missing'}">Missing (${fmt(missingCount)})</button>
+        <button type="button" role="tab" data-mode="found" aria-selected="${binMode === 'found'}">Found (${fmt(partCount(lines))})</button>
+      </div>` : ''}
       <label for="filter" class="sr">Filter pieces</label>
       <input id="filter" type="search" placeholder="Filter by name, part number or colour" autocomplete="off">
       <p class="hint" id="count"></p>
@@ -182,14 +202,38 @@ export async function renderBin(id) {
     </section>`;
 
   const listEl = $('#lineList');
+  const match = (l, q) => `${l.name} ${l.part_num} ${l.color_name} ${l.note || ''}`.toLowerCase().includes(q);
   const draw = (q) => {
     const needle = q.trim().toLowerCase();
-    const shown = needle
-      ? lines.filter((l) => `${l.name} ${l.part_num} ${l.color_name} ${l.note || ''}`.toLowerCase().includes(needle))
-      : lines;
-    $('#count').textContent = `${fmt(partCount(shown))} pieces in ${fmt(shown.length)} lines`;
+    if (isActive && binMode === 'missing') {
+      const shown = needle ? missing.filter((l) => match(l, needle)) : missing;
+      $('#count').textContent = missing.length
+        ? `${pl(shown.reduce((n, l) => n + l.rem, 0), 'piece', 'pieces')} in ${pl(shown.length, 'line', 'lines')} still missing`
+        : '';
+      if (!shown.length) {
+        listEl.innerHTML = `<p class="empty">${missing.length ? 'No pieces match.' : 'Nothing missing. This set is complete!'}</p>`;
+        return;
+      }
+      listEl.innerHTML = `<ul class="parts">${shown.map((l) => `
+        <li class="part">
+          <span class="thumb">${l.img ? `<img src="${esc(l.img)}" alt="" loading="lazy">` : ''}</span>
+          <span class="pinfo">
+            <span class="pname">${esc(l.name)}</span>
+            <span class="pmeta">
+              <span class="swatch${l.is_trans ? ' trans' : ''}" style="--c:#${esc(l.rgb)}"></span>
+              ${esc(l.color_name)} · ${esc(l.part_num)}${l.sticker ? ' <span class="tag">sticker</span>' : ''}
+              ${l.have ? `<br>Have ${fmt(l.have)} of ${fmt(l.qty)}` : ''}
+            </span>
+          </span>
+          <span class="qty">${fmt(l.rem)}</span>
+          <button type="button" class="btn small" data-found="${esc(l.id)}">Found</button>
+        </li>`).join('')}</ul>`;
+      return;
+    }
+    const shown = needle ? lines.filter((l) => match(l, needle)) : lines;
+    $('#count').textContent = `${pl(partCount(shown), 'piece', 'pieces')} in ${pl(shown.length, 'line', 'lines')}`;
     if (!shown.length) {
-      listEl.innerHTML = `<p class="empty">${lines.length ? 'No pieces match.' : isAll ? 'Nothing has been sorted yet.' : 'This bin is empty.'}</p>`;
+      listEl.innerHTML = `<p class="empty">${lines.length ? 'No pieces match.' : isAll ? 'Nothing has been sorted yet.' : 'Nothing found yet. Use the Missing tab or the Add tab.'}</p>`;
       return;
     }
     listEl.innerHTML = `<ul class="parts">${shown.map((l) => {
@@ -214,11 +258,23 @@ export async function renderBin(id) {
   };
   draw('');
   $('#filter').addEventListener('input', (e) => draw(e.target.value));
+  view.querySelector('.segmented')?.addEventListener('click', (e) => {
+    const m = e.target.closest('[data-mode]');
+    if (!m) return;
+    binMode = m.dataset.mode;
+    renderBin(id, true);
+  });
   listEl.addEventListener('click', async (e) => {
+    const fb = e.target.closest('[data-found]');
+    if (fb) {
+      const row = missing.find((l) => l.id === fb.dataset.found);
+      if (row && await markFound(row, bin)) await renderBin(id, true);
+      return;
+    }
     const btn = e.target.closest('[data-line]');
     if (!btn) return;
     const line = lines.find((l) => l.id === btn.dataset.line);
-    if (line && await editLine(line, ctx)) await renderBin(id);
+    if (line && await editLine(line, ctx)) await renderBin(id, true);
   });
 
   $('#abandon')?.addEventListener('click', async () => {
@@ -270,6 +326,35 @@ export async function confirmAbandon(binId) {
   if (!ok) return false;
   const res = await bins.abandonBin(binId);
   toast(res.pieces ? `Bin ${bin.number} abandoned. ${fmt(res.pieces)} pieces deleted.` : `Bin ${bin.number} abandoned.`);
+  return true;
+}
+
+// ---------- Mark a missing piece as found ----------
+
+async function markFound(row, bin) {
+  let qty = row.rem;
+  if (row.rem > 1) {
+    const { value, data } = await openDialog(`
+      <h2>${esc(row.name)}</h2>
+      <p class="hint">${esc(row.color_name)} · ${esc(row.part_num)} · ${fmt(row.rem)} still missing</p>
+      <label for="fq">How many did you find?</label>
+      <input id="fq" name="qty" type="number" inputmode="numeric" min="1" max="${row.rem}" step="1" required value="${row.rem}">
+      <div class="row">
+        <button class="btn" value="cancel" formnovalidate>Cancel</button>
+        <button class="btn primary" value="ok">Add to Bin ${bin.number}</button>
+      </div>`, { data: true });
+    if (value !== 'ok') return false;
+    qty = Number(data.get('qty'));
+    if (!Number.isInteger(qty) || qty < 1 || qty > row.rem) { toast(`Enter a number from 1 to ${row.rem}.`); return false; }
+  }
+  await bins.saveToBins({
+    part: { part_num: row.part_num, name: row.name, cat_id: row.cat_id },
+    color: { id: row.color_id, name: row.color_name, rgb: row.rgb },
+    flags: { sticker: !!row.sticker, printed: false, other: false },
+    note: '',
+    items: [{ binId: bin.id, qty }],
+  });
+  toast(`Found: ${fmt(qty)} × ${row.name}`);
   return true;
 }
 

@@ -42,6 +42,9 @@ export function openDialog(html, { data = false } = {}) {
       resolve(data ? { value, data: new FormData(d.querySelector('form')) } : value);
     };
     d.showModal();
+    // Don't pop the keyboard up: move focus off the first input to the dialog itself.
+    d.setAttribute('tabindex', '-1');
+    d.focus({ preventScroll: true });
   });
 }
 

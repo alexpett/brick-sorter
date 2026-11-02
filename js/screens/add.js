@@ -27,6 +27,7 @@ let ctx = null;
 let yours = new Set();
 let imgByPart = new Map();
 let yourColorIds = [];
+let neededBy = new Map(); // part_num -> [{ bin, set, colorId, need, held, rem }] across active sets
 let recent = [];
 let results = [];
 let saving = false;
@@ -46,6 +47,15 @@ async function refreshContext() {
     if (l.img && !imgByPart.has(l.part_num)) imgByPart.set(l.part_num, l.img);
   }
   yourColorIds = [...colors];
+  neededBy = new Map();
+  for (const a of ctx.active) {
+    for (const [k, need] of a.need) {
+      const [pn, cid] = k.split('|');
+      const held = a.held.get(k) || 0;
+      if (!neededBy.has(pn)) neededBy.set(pn, []);
+      neededBy.get(pn).push({ bin: a.bin, set: a.set, colorId: Number(cid), need, held, rem: need - held });
+    }
+  }
 }
 
 export async function renderAdd() {
@@ -91,6 +101,13 @@ function thumb(partNum, colorId) {
   return `<div class="thumb">${url ? `<img src="${esc(url)}" alt="" loading="lazy">` : ''}</div>`;
 }
 
+function partTag(pn) {
+  const open = [...new Set((neededBy.get(pn) || []).filter((e) => e.rem > 0).map((e) => e.bin.number))].sort((a, b) => a - b);
+  if (open.length) return ` <span class="tag ok">needed: ${open.map((n) => `Bin ${n}`).join(', ')}</span>`;
+  if ((neededBy.get(pn) || []).length) return ' <span class="tag ok">active set has all it needs</span>';
+  return yours.has(pn) ? ' <span class="tag ok">in your sets</span>' : '';
+}
+
 function drawPart() {
   const el = $r('#stepPart');
   if (S.part) {
@@ -101,7 +118,7 @@ function drawPart() {
         ${p.unrec ? '<div class="thumb"></div>' : thumb(p.part_num, S.colorId)}
         <div class="pinfo">
           <div class="pname">${esc(p.name)}</div>
-          <div class="pmeta">${p.unrec ? 'Goes to the Unrecognised bin' : `${esc(p.part_num)} · ${esc(refdata.categoryName(p.cat_id))}${yours.has(p.part_num) ? ' <span class="tag ok">in your sets</span>' : ''}`}</div>
+          <div class="pmeta">${p.unrec ? 'Goes to the Unrecognised bin' : `${esc(p.part_num)} · ${esc(refdata.categoryName(p.cat_id))}${partTag(p.part_num)}`}</div>
         </div>
         <button class="btn small" id="changePart" type="button">Change</button>
       </div>`;
@@ -133,7 +150,7 @@ function drawResults() {
         ${thumb(p.part_num, S.colorId)}
         <span class="pinfo">
           <span class="pname">${esc(p.name)}</span>
-          <span class="pmeta">${esc(p.part_num)} · ${esc(refdata.categoryName(p.cat_id))}${yours.has(p.part_num) ? ' <span class="tag ok">in your sets</span>' : ''}</span>
+          <span class="pmeta">${esc(p.part_num)} · ${esc(refdata.categoryName(p.cat_id))}${partTag(p.part_num)}</span>
         </span>
       </button>
     </li>`).join('')}</ul>`;
@@ -289,8 +306,19 @@ function drawPreview() {
       </li>`);
   }
   const total = pv.qty;
+  let hint = '';
+  const entries = S.part.unrec ? [] : (neededBy.get(S.part.part_num) || []);
+  if (!pv.allocations.length && entries.length) {
+    const cur = colorOf(S.colorId);
+    const open = entries.filter((e) => e.rem > 0 && colorOf(e.colorId));
+    hint = open.length
+      ? `<div class="notice"><p>${esc(cur?.name || 'This colour')} isn't needed by an active set. This part is needed in:</p>
+          <div class="flagrow">${open.map((e) => `<button type="button" class="chip" data-usecolor="${e.colorId}">${swatchHtml(colorOf(e.colorId))} ${esc(colorOf(e.colorId).name)} · Bin ${e.bin.number} (${fmt(e.rem)})</button>`).join('')}</div></div>`
+      : `<div class="notice"><p>Active sets already have all they need of this ${esc(cur?.name || 'colour')} part.</p></div>`;
+  }
   el.innerHTML = `
     <h2>4. Where it goes</h2>
+    ${hint}
     <ul class="dest">${rows.join('')}</ul>
     <button class="btn primary block" id="saveBtn" type="button">Save ${fmt(total)} ${total === 1 ? 'piece' : 'pieces'}</button>`;
 }
@@ -350,7 +378,6 @@ async function save() {
     S.flags = { sticker: false, printed: false, other: false };
     await refreshContext();
     drawAll();
-    $r('#q')?.focus();
   } catch (e) {
     toast(e.message || 'Could not save.');
   } finally {
@@ -363,7 +390,7 @@ async function save() {
 // ---------- events ----------
 
 async function onClick(e) {
-  const t = e.target.closest('[data-pick],[data-tab],[data-color],[data-flag],#changePart,#unrec,#changeColor,#saveBtn,#changeBin');
+  const t = e.target.closest('[data-usecolor],[data-pick],[data-tab],[data-color],[data-flag],#changePart,#unrec,#changeColor,#saveBtn,#changeBin');
   if (!t) return;
   if (t.dataset.pick !== undefined) {
     S.part = results[Number(t.dataset.pick)];
@@ -372,16 +399,16 @@ async function onClick(e) {
     drawAll();
     return;
   }
+  if (t.dataset.usecolor !== undefined) { await chooseColor(Number(t.dataset.usecolor)); return; }
   if (t.dataset.tab) { S.tab = t.dataset.tab; S.colorFilter = ''; drawColor(); return; }
   if (t.dataset.color !== undefined) { await chooseColor(Number(t.dataset.color)); return; }
   if (t.dataset.flag) {
     S.flags[t.dataset.flag] = !S.flags[t.dataset.flag];
     drawDetails();
-    if (t.dataset.flag === 'other' && S.flags.other) $r('#note')?.focus();
     return;
   }
   switch (t.id) {
-    case 'changePart': S.part = null; drawAll(); $r('#q')?.focus(); break;
+    case 'changePart': S.part = null; drawAll(); break;
     case 'unrec':
       S.part = { unrec: true, part_num: '', name: 'Unrecognised piece', cat_id: null };
       S.flags = { sticker: false, printed: false, other: false };

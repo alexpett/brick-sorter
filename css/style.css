@@ -366,3 +366,8 @@ dialog .row { justify-content: flex-end; }
 .rulelist li { display: grid; gap: 4px; }
 details.rules summary { font-weight: 700; cursor: pointer; }
 select { width: 100%; min-height: 44px; font: inherit; color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 0 10px; }
+
+.notice { margin: 0 0 12px; padding: 10px 12px; border: 1px solid var(--warn); border-radius: 10px; }
+.notice p { margin: 0 0 6px; }
+.notice .flagrow { margin: 6px 0 0; }
+.part > .btn.small { flex: none; }

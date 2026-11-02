@@ -452,7 +452,13 @@ async function editLine(line, ctx) {
   const known = colors.some((c) => c.id === line.color_id);
   const colorOptions = (known ? colors : [{ id: line.color_id, name: line.color_name }, ...colors])
     .map((c) => `<option value="${c.id}"${c.id === line.color_id ? ' selected' : ''}>${esc(c.name)}</option>`).join('');
+  const needs = new Map();
+  for (const b of ctx.bins.filter((x) => x.type === 'active')) {
+    const rows = await db.byIndex('setParts', 'set_num', b.set_num);
+    needs.set(b.id, rows.filter((l) => l.part_num === line.part_num));
+  }
   const binOptions = ctx.bins
+    .filter((b) => b.type !== 'active' || b.id === line.bin_id || (needs.get(b.id) || []).length)
     .slice()
     .sort((a, b) => (a.type === b.type ? (a.number ?? a.order ?? 0) - (b.number ?? b.order ?? 0) : a.type === 'active' ? -1 : 1))
     .map((b) => `<option value="${esc(b.id)}"${b.id === line.bin_id ? ' selected' : ''}>${esc(bins.binLabel(b, ctx.setsByNum))}</option>`).join('');
@@ -494,6 +500,18 @@ async function editLine(line, ctx) {
   if (!Number.isInteger(qty) || qty < 1) { toast('Quantity must be a whole number of at least 1.'); return false; }
   const colorId = Number(data.get('color'));
   const color = refdata.ref.colorById.get(colorId);
+  const targetBin = ctx.bins.find((b) => b.id === String(data.get('bin')));
+  if (targetBin?.type === 'active' && line.part_num) {
+    // An active bin never holds more of a part than its set needs.
+    const need = (await db.byIndex('setParts', 'set_num', targetBin.set_num))
+      .filter((l) => l.part_num === line.part_num && l.color_id === colorId).reduce((n, l) => n + l.qty, 0);
+    const others = (ctx.byBin.get(targetBin.id) || [])
+      .filter((l) => l.id !== line.id && l.part_num === line.part_num && l.color_id === colorId).reduce((n, l) => n + l.qty, 0);
+    if (qty + others > need) {
+      toast(need ? `Bin ${targetBin.number}'s set only needs ${fmt(need)} of this piece in that colour.` : `Bin ${targetBin.number}'s set doesn't need this piece in that colour.`);
+      return false;
+    }
+  }
   await db.put('inventory', {
     ...line,
     qty,

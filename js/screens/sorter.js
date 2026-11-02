@@ -190,6 +190,11 @@ export function createSorter(el, { onSaved, onChangePart } = {}) {
     const q = qty();
     const sug = suggest();
     const sugMap = new Map((sug?.dest || []).map((d) => [d.binId, d.qty]));
+    const remFor = (b) => {
+      if (b.type !== 'active' || st.part.unrec || colorId === null) return 0;
+      const e = (info.neededBy.get(st.part.part_num) || []).find((x) => x.bin.id === b.id && x.colorId === colorId);
+      return e ? Math.max(0, e.rem) : 0;
+    };
     const split = sug && sug.dest.length > 1 && !sug.needsRule;
     const partial = !!(sug && sug.needsRule && sug.allocations.length); // some go to active bins, the rest need a storage choice
     let usable = ctx.bins.filter((b) => !b.deleted);
@@ -201,8 +206,10 @@ export function createSorter(el, { onSaved, onChangePart } = {}) {
       const label = isActive ? `Bin ${b.number}` : b.label.slice(0, 2).toUpperCase();
       const name = isActive ? (ctx.setsByNum.get(b.set_num)?.name || '') : b.label;
       const s = sugMap.has(b.id);
+      // An active bin only takes what its set still needs.
+      const blocked = isActive && remFor(b) <= 0;
       return `
-        <button type="button" class="tile${s ? ' suggested' : ''}" data-bin="${esc(b.id)}"${q === null || colorId === null ? ' disabled' : ''}>
+        <button type="button" class="tile${s ? ' suggested' : ''}" data-bin="${esc(b.id)}"${q === null || colorId === null || blocked ? ' disabled' : ''}${blocked ? ' title="This set doesn’t need this piece"' : ''}>
           <span class="binchip big${isActive ? '' : ' store'}"${bins.chipStyle(b)}>${esc(label)}</span>
           <span class="tilename">${esc(name)}</span>
           ${s && (split || partial) ? `<span class="tilebadge">${fmt(sugMap.get(b.id))}</span>` : ''}
@@ -231,13 +238,19 @@ export function createSorter(el, { onSaved, onChangePart } = {}) {
     box.innerHTML = `${note}<div class="tiles">${[...active, ...storage].map(tile).join('')}</div>`;
   }
 
-  async function commit(items) {
+  async function commit(items, { keep = 0 } = {}) {
     if (st.saving) return;
     const q = qty();
     if (q === null || colorId === null || !st.part) return;
     st.saving = true;
     try {
       const part = st.part;
+      for (const it of items) {
+        const b = info.ctx.bins.find((x) => x.id === it.binId);
+        if (b?.type !== 'active') continue;
+        const e = (info.neededBy.get(part.part_num) || []).find((x) => x.bin.id === b.id && x.colorId === colorId);
+        if (!e || e.rem < it.qty) { toast(`Bin ${b.number} doesn’t need that many.`); return; }
+      }
       const ruleMissing = !part.unrec && bins.resolveStorage(info.ctx, part) === null;
       await bins.saveToBins({ part, color: colorOf(colorId), flags: st.flags, note: st.note.trim(), items });
       const where = items.map((it) => {
@@ -252,11 +265,18 @@ export function createSorter(el, { onSaved, onChangePart } = {}) {
         extra = ` Remembered for ${part.cat_id != null ? refdata.categoryName(part.cat_id) : 'this part'}.`;
       }
       toast(`Saved: ${where}.${extra}`);
+      await refreshInfo();
+      if (keep > 0) {
+        // Only part of the quantity fitted in that bin: keep the piece in the panel for the rest.
+        st.qtyText = String(keep);
+        toast(`Saved: ${where}. ${fmt(keep)} left to place.`);
+        renderTop();
+        return;
+      }
       st.part = null;
       st.qtyText = '1';
       st.note = '';
       st.flags = { sticker: false, printed: false, other: false };
-      await refreshInfo();
       renderTop();
       onSaved?.();
     } catch (e) {
@@ -274,6 +294,12 @@ export function createSorter(el, { onSaved, onChangePart } = {}) {
       const b = info.ctx.bins.find((x) => x.id === t.dataset.bin);
       if (sug && sug.needsRule && sug.allocations.length && b?.type === 'storage') {
         await commit([...sug.dest, { binId: b.id, qty: sug.leftover }]); // active bins as suggested, the rest here
+      } else if (b?.type === 'active') {
+        const e = (info.neededBy.get(st.part.part_num) || []).find((x) => x.bin.id === b.id && x.colorId === colorId);
+        const room = e ? Math.max(0, e.rem) : 0;
+        if (room <= 0) { toast('That set doesn’t need this piece.'); return; }
+        const take = Math.min(qty(), room);
+        await commit([{ binId: b.id, qty: take }], { keep: qty() - take });
       } else {
         await commit([{ binId: t.dataset.bin, qty: qty() }]);
       }

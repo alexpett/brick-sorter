@@ -10,8 +10,13 @@
  * The newest "updated" time wins when the same record is changed in two places.
  */
 
-// Make up a long random code (the app can generate one for you) and paste it between the quotes.
+// Your secret code. Best: save it as a script property named SECRET_CODE (Project Settings >
+// Script properties), so it never sits in the code. Otherwise paste it between the quotes below.
 const SECRET_CODE = 'PASTE-YOUR-SECRET-CODE-HERE';
+
+function secretCode() {
+  return PropertiesService.getScriptProperties().getProperty('SECRET_CODE') || SECRET_CODE;
+}
 
 const TABLES = ['sets', 'bins', 'inventory', 'settings', 'log'];
 const HEADER = ['key', 'updated', 'deleted', 'seq', 'summary', 'json'];
@@ -25,8 +30,9 @@ function doPost(e) {
   let out;
   try {
     const body = JSON.parse(e.postData.contents);
-    if (SECRET_CODE === 'PASTE-YOUR-SECRET-CODE-HERE') throw new Error('The script has no secret code yet. Edit SECRET_CODE in the script.');
-    if (!body.token || body.token !== SECRET_CODE) throw new Error('Wrong secret code.');
+    const secret = secretCode();
+    if (secret === 'PASTE-YOUR-SECRET-CODE-HERE') throw new Error('The script has no secret code yet. Add a script property named SECRET_CODE (or edit SECRET_CODE in the script).');
+    if (!body.token || body.token !== secret) throw new Error('Wrong secret code.');
     const lock = LockService.getScriptLock();
     lock.waitLock(30000);
     try {

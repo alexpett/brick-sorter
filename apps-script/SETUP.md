@@ -5,7 +5,7 @@ Do this once, on a computer. It takes about five minutes.
 1. Create a new Google Sheet (call it "Brick Sorter backup").
 2. In the sheet choose **Extensions > Apps Script**.
 3. Delete everything in the editor and paste in the contents of [`Code.gs`](Code.gs) (open it on GitHub, press **Raw**, select all, copy).
-4. Near the top, replace `PASTE-YOUR-SECRET-CODE-HERE` with a long random code of your own. In the app, **Settings > Google Sheet backup > Make a code** makes one for you. Press the disk icon to save.
+4. Near the top, save your code as a script property named `SECRET_CODE` (Project Settings > Script properties > Add script property), which keeps it out of the code. Or, instead, replace `PASTE-YOUR-SECRET-CODE-HERE` with it. In the app, **Settings > Google Sheet backup > Make a code** makes one for you. Press the disk icon to save.
 5. Choose **Deploy > New deployment**. Click the cog next to "Select type" and pick **Web app**.
    - Execute as: **Me**
    - Who has access: **Anyone**
@@ -25,7 +25,7 @@ From then on the app backs up a few seconds after each change, when you open it,
 
 ## Keep it private
 
-"Anyone" access means the web app address can be reached by anyone who has it, but every request must carry your secret code. Treat the address and the code like a password, and never put them in the repository. To rotate the code, change `SECRET_CODE`, choose **Deploy > Manage deployments > Edit > New version > Deploy**, and enter the new code in the app.
+"Anyone" access means the web app address can be reached by anyone who has it, but every request must carry your secret code. Treat the address and the code like a password, and never put them in the repository. To rotate the code, change the `SECRET_CODE` property (or constant), choose **Deploy > Manage deployments > Edit > New version > Deploy**, and enter the new code in the app.
 
 ## Camera fallback
 

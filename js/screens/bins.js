@@ -2,7 +2,7 @@
 import * as db from '../db.js';
 import * as refdata from '../data.js';
 import * as bins from '../bins.js';
-import { view, esc, fmt, toast, openDialog, ask, setTitle, safeRgb } from '../ui.js';
+import { view, esc, fmt, toast, openDialog, ask, setTitle, safeRgb, stepperHtml } from '../ui.js';
 import { celebrate } from '../rewards.js';
 import { pickColor, refreshInfo, loadColorState } from './sorter.js';
 
@@ -438,7 +438,7 @@ async function markFound(row, bin) {
       <h2>${esc(row.name)}</h2>
       <p class="hint">${esc(row.color_name)} · ${esc(row.part_num)} · ${fmt(row.rem)} still missing</p>
       <label for="fq">How many did you find?</label>
-      <input id="fq" name="qty" type="number" inputmode="numeric" min="1" max="${row.rem}" step="1" required value="${row.rem}">
+      ${stepperHtml({ id: 'fq', name: 'qty', value: 1, max: row.rem })}
       <div class="row">
         <button class="btn" value="cancel" formnovalidate>Cancel</button>
         <button class="btn primary" value="ok">Add to Bin ${bin.number}</button>
@@ -467,7 +467,7 @@ async function takeFromStorage(row, bin) {
       <h2>${esc(row.name)}</h2>
       <p class="hint">${esc(row.color_name)} · ${esc(row.part_num)} · ${fmt(row.avail)} in storage, ${fmt(row.rem)} needed</p>
       <label for="tq">How many are you taking out of storage?</label>
-      <input id="tq" name="qty" type="number" inputmode="numeric" min="1" max="${max}" step="1" required value="${max}">
+      ${stepperHtml({ id: 'tq', name: 'qty', value: max, max })}
       <div class="row">
         <button class="btn" value="cancel" formnovalidate>Cancel</button>
         <button class="btn primary" value="ok">Move to Bin ${bin.number}</button>
@@ -515,7 +515,7 @@ async function moveLineDialog(line, ctx, wm) {
     <h2>${esc(line.name)}</h2>
     <p class="hint">${esc(line.color_name)}${line.part_num ? ` · ${esc(line.part_num)}` : ''} · ${fmt(line.qty)} in ${esc(cur ? bins.binLabel(cur, ctx.setsByNum) : 'this bin')}</p>
     <label for="mq">How many are you moving?</label>
-    <input id="mq" name="qty" type="number" inputmode="numeric" min="1" max="${line.qty}" step="1" required value="${startQty}">
+    ${stepperHtml({ id: 'mq', name: 'qty', value: startQty, max: line.qty })}
     <label for="mb">To</label>
     <select id="mb" name="bin">${opts.map((b) => `<option value="${esc(b.id)}"${b.id === dflt.id ? ' selected' : ''}>${esc(bins.binLabel(b, ctx.setsByNum))}${wantRem.has(b.id) ? ` — needs ${fmt(wantRem.get(b.id))}` : ''}</option>`).join('')}</select>
     <div class="row">

@@ -524,3 +524,7 @@ dialog .colorbtn { width: 100%; }
 /* moving pieces between bins */
 .part.haswrap { flex-wrap: wrap; }
 .part .moverow { flex-basis: 100%; padding-left: 60px; }
+
+.dlgstepper { margin: 6px 0 12px; width: fit-content; }
+.dlgstepper input { -moz-appearance: textfield; appearance: textfield; }
+.dlgstepper input::-webkit-outer-spin-button, .dlgstepper input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }

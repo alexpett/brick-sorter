@@ -37,7 +37,18 @@ export function openDialog(html, { data = false } = {}) {
     const d = $('#dlg');
     d.innerHTML = `<form method="dialog">${html}</form>`;
     d.returnValue = '';
+    // − / + buttons (see stepperHtml) adjust the number box they point at.
+    d.onclick = (e) => {
+      const b = e.target.closest('[data-step]');
+      if (!b) return;
+      const inp = d.querySelector(`#${b.dataset.for}`);
+      if (!inp) return;
+      const n = Number(inp.value) || Number(inp.min) || 0;
+      inp.value = String(Math.min(Number(inp.max) || 99999, Math.max(Number(inp.min) || 0, n + Number(b.dataset.step))));
+      inp.dispatchEvent(new Event('input', { bubbles: true }));
+    };
     d.onclose = () => {
+      d.onclick = null;
       const value = d.returnValue;
       resolve(data ? { value, data: new FormData(d.querySelector('form')) } : value);
     };
@@ -54,6 +65,15 @@ export async function notify({ title, body, ok = 'OK' }) {
     <h2>${esc(title)}</h2>
     <p>${esc(body)}</p>
     <div class="row"><button class="btn primary" value="ok">${esc(ok)}</button></div>`);
+}
+
+// A number box with − and + buttons, for use inside openDialog.
+export function stepperHtml({ id, name, value, min = 1, max }) {
+  return `<div class="stepper dlgstepper" role="group" aria-label="Quantity">
+    <button type="button" data-step="-1" data-for="${id}" aria-label="One fewer">−</button>
+    <input id="${id}" name="${name}" type="number" inputmode="numeric" min="${min}" max="${max}" step="1" required value="${value}">
+    <button type="button" data-step="1" data-for="${id}" aria-label="One more">+</button>
+  </div>`;
 }
 
 export async function ask({ title, body, ok = 'OK', cancel = 'Cancel', danger = false }) {

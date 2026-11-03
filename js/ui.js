@@ -48,6 +48,14 @@ export function openDialog(html, { data = false } = {}) {
   });
 }
 
+// A one-button alert the person has to dismiss (unlike a toast, it doesn't fade).
+export async function notify({ title, body, ok = 'OK' }) {
+  await openDialog(`
+    <h2>${esc(title)}</h2>
+    <p>${esc(body)}</p>
+    <div class="row"><button class="btn primary" value="ok">${esc(ok)}</button></div>`);
+}
+
 export async function ask({ title, body, ok = 'OK', cancel = 'Cancel', danger = false }) {
   const result = await openDialog(`
     <h2>${esc(title)}</h2>

@@ -3,13 +3,13 @@
 import * as db from '../db.js';
 import * as refdata from '../data.js';
 import * as bins from '../bins.js';
-import { $, esc, fmt, toast } from '../ui.js';
+import { $, esc, fmt, toast, notify, openDialog } from '../ui.js';
 
 const MAX_RECENT = 6;
 const FLAGS = [['sticker', 'Sticker'], ['printed', 'Printed'], ['other', 'Other']];
 
 // Shared lookups, refreshed whenever bins or sets change.
-export const info = { ctx: null, yours: new Set(), imgByPart: new Map(), neededBy: new Map(), yourColorIds: [] };
+export const info = { ctx: null, yours: new Set(), imgByPart: new Map(), neededBy: new Map(), yourColorIds: [], colorCounts: new Map() };
 
 let colorId = null;
 let recent = [];
@@ -20,13 +20,14 @@ export async function refreshInfo() {
   info.ctx = await bins.loadContext();
   info.yours = new Set();
   info.imgByPart = new Map();
-  const colors = new Set();
+  const colors = new Map();
   for (const l of await db.all('setParts')) {
     info.yours.add(l.part_num);
-    colors.add(l.color_id);
+    colors.set(l.color_id, (colors.get(l.color_id) || 0) + (Number(l.quantity) || 0));
     if (l.img && !info.imgByPart.has(l.part_num)) info.imgByPart.set(l.part_num, l.img);
   }
-  info.yourColorIds = [...colors];
+  info.colorCounts = colors;
+  info.yourColorIds = [...colors.keys()].sort((a, b) => colors.get(b) - colors.get(a));
   info.neededBy = new Map();
   for (const a of info.ctx.active) {
     for (const [k, need] of a.need) {
@@ -81,11 +82,15 @@ async function chooseColor(id) {
   await db.setSetting('recentColors', recent);
 }
 
-function pickColor() {
+// Opens the colour picker dialog. Resolves with a colour id, or null if cancelled.
+export function pickColor(current = colorId) {
   return new Promise((resolve) => {
     const d = $('#dlg');
     let tab = recent.length ? 'recent' : 'yours';
     let filter = '';
+    const open = new Set();
+    const cur = current === null ? null : colorOf(current);
+    if (cur) open.add(refdata.colorGroup(cur));
     d.innerHTML = `<form method="dialog">
       <h2>Colour</h2>
       <div class="segmented" id="cpTabs" role="tablist"></div>
@@ -93,29 +98,48 @@ function pickColor() {
       <div id="cgrid"></div>
       <div class="row"><button class="btn" value="cancel" formnovalidate>Cancel</button></div>
     </form>`;
-    const list = () => {
-      const byName = (a, b) => a.name.localeCompare(b.name);
-      if (tab === 'recent') return recent.map(colorOf).filter(Boolean);
-      if (tab === 'yours') return info.yourColorIds.map(colorOf).filter(Boolean).sort(byName);
-      return refdata.pickerColors();
-    };
+    const byRank = (a, b) => b.popularity - a.popularity || a.name.localeCompare(b.name);
+    const yoursRank = (a, b) => (info.colorCounts.get(b.id) || 0) - (info.colorCounts.get(a.id) || 0) || a.name.localeCompare(b.name);
+    const swatches = (colors) => `<div class="cgrid">${colors.map((c) => `
+      <button type="button" class="cswatch" data-color="${c.id}" aria-pressed="${c.id === current}" title="${esc(c.name)}">
+        ${swatchHtml(c, ' lg')}<span class="cn">${esc(c.name)}</span>
+      </button>`).join('')}</div>`;
     const draw = () => {
-      const yoursCount = info.yourColorIds.filter((id) => colorOf(id)).length;
-      d.querySelector('#cpTabs').innerHTML = [['recent', `Recent (${recent.length})`], ['yours', `Your colours (${yoursCount})`], ['all', 'All']]
+      const yours = info.yourColorIds.map(colorOf).filter(Boolean).sort(yoursRank);
+      d.querySelector('#cpTabs').innerHTML = [['recent', `Recent (${recent.length})`], ['yours', `Your colours (${yours.length})`], ['all', 'All']]
         .map(([id, label]) => `<button type="button" role="tab" data-tab="${id}" aria-selected="${tab === id}">${esc(label)}</button>`).join('');
       d.querySelector('#cfilter').hidden = tab === 'recent';
       const needle = filter.trim().toLowerCase();
-      const colors = list().filter((c) => !needle || c.name.toLowerCase().includes(needle));
-      d.querySelector('#cgrid').innerHTML = colors.length
-        ? `<div class="cgrid">${colors.map((c) => `
-            <button type="button" class="cswatch" data-color="${c.id}" aria-pressed="${c.id === colorId}" title="${esc(c.name)}">
-              ${swatchHtml(c, ' lg')}<span class="cn">${esc(c.name)}</span>
-            </button>`).join('')}</div>`
-        : `<p class="hint">${tab === 'recent' ? 'Colours you pick will appear here.' : 'No colours match.'}</p>`;
+      const match = (c) => !needle || c.name.toLowerCase().includes(needle);
+      const box = d.querySelector('#cgrid');
+      let colors;
+      if (tab === 'recent') colors = recent.map(colorOf).filter(Boolean);
+      else if (tab === 'yours') colors = yours.filter(match);
+      else if (needle) colors = refdata.pickerColors().filter(match).sort(byRank);
+      if (colors) {
+        box.innerHTML = colors.length ? swatches(colors) : `<p class="hint">${tab === 'recent' ? 'Colours you pick will appear here.' : 'No colours match.'}</p>`;
+        return;
+      }
+      // All, no filter: collapsible groups, each ranked by how widely the colour is used.
+      const all = refdata.pickerColors();
+      box.innerHTML = `<div class="cgroups">${refdata.COLOR_GROUPS.map((g) => {
+        const list = all.filter((c) => refdata.colorGroup(c) === g).sort(byRank);
+        if (!list.length) return '';
+        const isOpen = open.has(g);
+        return `<section class="cgroup">
+          <button type="button" class="cghead" data-group="${esc(g)}" aria-expanded="${isOpen}">
+            <span class="cgname">${esc(g)} <small>${list.length}</small></span>
+            <span class="cgprev">${list.slice(0, 5).map((c) => swatchHtml(c)).join('')}</span>
+            <span class="cgarrow" aria-hidden="true">${isOpen ? '▾' : '▸'}</span>
+          </button>
+          ${isOpen ? swatches(list) : ''}
+        </section>`;
+      }).join('')}</div>`;
     };
     d.onclick = (e) => {
-      const t = e.target.closest('[data-tab],[data-color]');
+      const t = e.target.closest('[data-tab],[data-color],[data-group]');
       if (!t) return;
+      if (t.dataset.group) { const g = t.dataset.group; if (open.has(g)) open.delete(g); else open.add(g); draw(); return; }
       if (t.dataset.tab) { tab = t.dataset.tab; filter = ''; const f = d.querySelector('#cfilter'); f.value = ''; draw(); return; }
       d.close(t.dataset.color);
     };
@@ -137,7 +161,7 @@ function pickColor() {
 // ---------- the panel ----------
 
 export function createSorter(el, { onSaved, onChangePart } = {}) {
-  const st = { part: null, qtyText: '1', flags: { sticker: false, printed: false, other: false }, note: '', saving: false };
+  const st = { part: null, qtyText: '1', flags: { sticker: false, printed: false, other: false }, note: '', saving: false, sugOpen: true };
   el.classList.add('sorter');
   el.hidden = true;
 
@@ -162,6 +186,7 @@ export function createSorter(el, { onSaved, onChangePart } = {}) {
     if (!st.part || st.part.unrec) return '';
     const list = colourSuggestions(st.part.part_num);
     if (!list.length) return '';
+    if (!st.sugOpen) return `<div class="suggest"><button type="button" class="linkbtn" id="showSug">Show colours needed by your sets (${list.length})</button></div>`;
     return `<div class="suggest">
       <p class="suggest-label">Needed by your sets — tap to use</p>
       <div class="flagrow">${list.map((c) => {
@@ -255,7 +280,40 @@ export function createSorter(el, { onSaved, onChangePart } = {}) {
     } else if (sug?.needsRule) {
       note = `<p class="hint">No storage rule for this part yet. Tap a storage bin and the app will remember it for ${st.part.cat_id != null ? `every part in “${esc(refdata.categoryName(st.part.cat_id))}”` : 'this part'}.</p>`;
     }
-    box.innerHTML = `${note}<div class="tiles">${[...active, ...storage].map(tile).join('')}</div>`;
+    const addTile = st.part.unrec ? '' : `
+        <button type="button" class="tile addtile" data-addbin="1">
+          <span class="binchip big addchip" aria-hidden="true">+</span>
+          <span class="tilename">Add bin</span>
+        </button>`;
+    box.innerHTML = `${note}<div class="tiles">${[...active, ...storage].map(tile).join('')}${addTile}</div>`;
+  }
+
+  // Create a storage bin without leaving the Log screen. The new bin is shown but not chosen.
+  async function addBinFlow(error = '', name = '', color = '') {
+    const { value, data } = await openDialog(`
+      <h2>Add storage bin</h2>
+      ${error ? `<p class="hint err" role="alert">${esc(error)}</p>` : ''}
+      <label for="nbn">Name</label>
+      <input id="nbn" name="name" maxlength="30" required autocomplete="off" value="${esc(name)}">
+      <p class="suggest-label">Colour (optional)</p>
+      <div class="cgrid presets pickc">${bins.BIN_COLORS.map((c) => `<label class="cswatch"><input type="radio" name="color" value="${c}"${c === color ? ' checked' : ''}><span class="swatch lg" style="--c:${c}"></span></label>`).join('')}</div>
+      <div class="row">
+        <button class="btn" value="cancel" formnovalidate>Cancel</button>
+        <button class="btn primary" value="add">Add bin</button>
+      </div>`, { data: true });
+    if (value !== 'add') return;
+    const nm = String(data.get('name') || '');
+    const col = String(data.get('color') || '');
+    try {
+      const bin = await bins.addStorageBin(nm);
+      if (col) await bins.setBinColor(bin.id, col);
+    } catch (e) {
+      await addBinFlow(e.message || 'Could not add the bin.', nm, col);
+      return;
+    }
+    await refreshInfo();
+    renderDest();
+    toast(`Added “${nm.trim()}”.`);
   }
 
   async function commit(items, { keep = 0 } = {}) {
@@ -289,8 +347,12 @@ export function createSorter(el, { onSaved, onChangePart } = {}) {
       if (keep > 0) {
         // Only part of the quantity fitted in that bin: keep the piece in the panel for the rest.
         st.qtyText = String(keep);
-        toast(`Saved: ${where}. ${fmt(keep)} left to place.`);
         renderTop();
+        const b0 = info.ctx.bins.find((x) => x.id === items[0].binId);
+        await notify({
+          title: `${fmt(keep)} still to place`,
+          body: `${b0?.type === 'active' ? `Bin ${b0.number}` : 'That bin'} only needed ${fmt(items[0].qty)}, so ${fmt(items[0].qty)} ${items[0].qty === 1 ? 'was' : 'were'} saved there. The other ${fmt(keep)} need to go in a different bin — choose one now.`,
+        });
         return;
       }
       st.part = null;
@@ -307,8 +369,9 @@ export function createSorter(el, { onSaved, onChangePart } = {}) {
   }
 
   el.addEventListener('click', async (e) => {
-    const t = e.target.closest('[data-bin],[data-flag],[data-usecolor],#changePart,#colorBtn,#qtyMinus,#qtyPlus,#useSplit');
+    const t = e.target.closest('[data-bin],[data-flag],[data-usecolor],#changePart,#colorBtn,#showSug,[data-addbin],#qtyMinus,#qtyPlus,#useSplit');
     if (!t) return;
+    if (t.dataset.addbin) { await addBinFlow(); return; }
     if (t.dataset.bin) {
       const sug = suggest();
       const b = info.ctx.bins.find((x) => x.id === t.dataset.bin);
@@ -325,13 +388,14 @@ export function createSorter(el, { onSaved, onChangePart } = {}) {
       }
       return;
     }
-    if (t.dataset.usecolor !== undefined) { await chooseColor(Number(t.dataset.usecolor)); renderTop(); return; }
+    if (t.dataset.usecolor !== undefined) { st.sugOpen = false; await chooseColor(Number(t.dataset.usecolor)); renderTop(); return; }
     if (t.dataset.flag) {
       st.flags[t.dataset.flag] = !st.flags[t.dataset.flag];
       renderTop();
       return;
     }
     switch (t.id) {
+      case 'showSug': st.sugOpen = true; renderTop(); break;
       case 'changePart': st.part = null; renderTop(); onChangePart?.(); break;
       case 'colorBtn': {
         const id = await pickColor();
@@ -357,6 +421,7 @@ export function createSorter(el, { onSaved, onChangePart } = {}) {
   return {
     async setPart(part) {
       st.part = part;
+      st.sugOpen = true;
       st.qtyText = '1';
       st.note = '';
       st.flags = { sticker: false, printed: false, other: false };

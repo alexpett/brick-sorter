@@ -2,7 +2,8 @@
 import * as db from '../db.js';
 import * as refdata from '../data.js';
 import * as bins from '../bins.js';
-import { view, esc, fmt, toast, openDialog, ask, setTitle } from '../ui.js';
+import { view, esc, fmt, toast, openDialog, ask, setTitle, safeRgb } from '../ui.js';
+import { pickColor, refreshInfo, loadColorState } from './sorter.js';
 
 const partCount = (lines) => bins.sumQty(lines);
 const pl = (n, one, many) => `${fmt(n)} ${n === 1 ? one : many}`;
@@ -135,9 +136,10 @@ async function drawRules() {
 
 let binMode = 'missing'; // 'missing' | 'found' for active bins
 let pickOnly = false; // missing list: only pieces that are sitting in storage
+let colorFilter = null; // colour id chosen in the bin's colour chips
 
 export async function renderBin(id, keepMode = false) {
-  if (!keepMode) { binMode = 'missing'; pickOnly = false; }
+  if (!keepMode) { binMode = 'missing'; pickOnly = false; colorFilter = null; }
   const ctx = await bins.loadContext();
   const isAll = id === 'all';
   const bin = isAll ? null : ctx.bins.find((b) => b.id === id);
@@ -215,16 +217,35 @@ export async function renderBin(id, keepMode = false) {
       ${binMode === 'missing' && pickCount ? `<button type="button" class="chip pickchip" id="pickToggle" aria-pressed="${pickOnly}">In storage: ${fmt(pickCount)} ${pickCount === 1 ? 'part' : 'parts'} to pick</button>` : ''}` : ''}
       <label for="filter" class="sr">Filter pieces</label>
       <input id="filter" type="search" placeholder="Filter by name, part number or colour" autocomplete="off">
+      <div class="flagrow colorchips" id="colorChips" role="group" aria-label="Filter by colour"></div>
       <p class="hint" id="count"></p>
       <div id="lineList"></div>
     </section>`;
 
   const listEl = $('#lineList');
   const match = (l, q) => `${l.name} ${l.part_num} ${l.color_name} ${l.note || ''}`.toLowerCase().includes(q);
+  const byColor = (l) => colorFilter === null || l.color_id === colorFilter;
+  const showMissing = isActive && binMode === 'missing';
+  const basePool = showMissing ? (pickOnly ? missing.filter((l) => l.avail > 0) : missing) : lines;
+  // Colour chips: the colours in this list, most pieces first.
+  const chipMap = new Map();
+  for (const l of basePool) {
+    const c = chipMap.get(l.color_id) || { id: l.color_id, name: l.color_name, rgb: l.rgb, trans: !!l.is_trans || /^Trans/i.test(l.color_name || ''), n: 0 };
+    c.n += showMissing ? l.rem : l.qty;
+    chipMap.set(l.color_id, c);
+  }
+  if (colorFilter !== null && !chipMap.has(colorFilter)) colorFilter = null;
+  const drawChips = () => {
+    const el = $('#colorChips');
+    const list = [...chipMap.values()].sort((a, b) => b.n - a.n || String(a.name).localeCompare(String(b.name)));
+    el.hidden = list.length < 2;
+    el.innerHTML = list.map((c) => `<button type="button" class="chip" data-cfilter="${c.id}" aria-pressed="${c.id === colorFilter}"><span class="swatch${c.trans ? ' trans' : ''}" style="--c:#${esc(safe(c.rgb))}"></span> ${esc(c.name)} · ${fmt(c.n)}</button>`).join('');
+  };
+  const safe = (rgb) => (/^[0-9a-f]{6}$/i.test(rgb || '') ? rgb : '999999');
   const draw = (q) => {
     const needle = q.trim().toLowerCase();
-    if (isActive && binMode === 'missing') {
-      const pool = pickOnly ? missing.filter((l) => l.avail > 0) : missing;
+    if (showMissing) {
+      const pool = basePool.filter(byColor);
       const shown = needle ? pool.filter((l) => match(l, needle)) : pool;
       $('#count').textContent = missing.length
         ? `${pl(shown.reduce((n, l) => n + l.rem, 0), 'piece', 'pieces')} in ${pl(shown.length, 'line', 'lines')} still missing`
@@ -253,7 +274,8 @@ export async function renderBin(id, keepMode = false) {
         </li>`).join('')}</ul>`;
       return;
     }
-    const shown = needle ? lines.filter((l) => match(l, needle)) : lines;
+    const pool = lines.filter(byColor);
+    const shown = needle ? pool.filter((l) => match(l, needle)) : pool;
     $('#count').textContent = `${pl(partCount(shown), 'piece', 'pieces')} in ${pl(shown.length, 'line', 'lines')}`;
     if (!shown.length) {
       listEl.innerHTML = `<p class="empty">${lines.length ? 'No pieces match.' : isAll ? 'Nothing has been sorted yet.' : 'Nothing found yet. Use the Missing tab or the Add tab.'}</p>`;
@@ -279,7 +301,16 @@ export async function renderBin(id, keepMode = false) {
       </li>`;
     }).join('')}</ul>`;
   };
+  drawChips();
   draw('');
+  $('#colorChips').addEventListener('click', (e) => {
+    const c = e.target.closest('[data-cfilter]');
+    if (!c) return;
+    const idc = Number(c.dataset.cfilter);
+    colorFilter = colorFilter === idc ? null : idc;
+    drawChips();
+    draw($('#filter').value);
+  });
   $('#filter').addEventListener('input', (e) => draw(e.target.value));
   view.querySelector('.segmented')?.addEventListener('click', (e) => {
     const m = e.target.closest('[data-mode]');
@@ -447,11 +478,15 @@ async function takeFromStorage(row, bin) {
 
 // ---------- Edit one line ----------
 
-async function editLine(line, ctx) {
-  const colors = refdata.ref.loaded ? refdata.pickerColors() : [];
-  const known = colors.some((c) => c.id === line.color_id);
-  const colorOptions = (known ? colors : [{ id: line.color_id, name: line.color_name }, ...colors])
-    .map((c) => `<option value="${c.id}"${c.id === line.color_id ? ' selected' : ''}>${esc(c.name)}</option>`).join('');
+async function editLine(line, ctx, draft = {}) {
+  const curColorId = draft.color ?? line.color_id;
+  const curColor = refdata.ref.colorById.get(curColorId);
+  const colorName = curColor ? curColor.name : line.color_name;
+  const colorRgb = curColor ? curColor.rgb : line.rgb;
+  const qtyVal = draft.qty ?? line.qty;
+  const binVal = draft.bin ?? line.bin_id;
+  const fl = (k) => (draft.flags ? draft.flags[k] : line[k]);
+  const noteVal = draft.note ?? (line.note || '');
   const needs = new Map();
   for (const b of ctx.bins.filter((x) => x.type === 'active')) {
     const rows = await db.byIndex('setParts', 'set_num', b.set_num);
@@ -461,26 +496,27 @@ async function editLine(line, ctx) {
     .filter((b) => b.type !== 'active' || b.id === line.bin_id || (needs.get(b.id) || []).length)
     .slice()
     .sort((a, b) => (a.type === b.type ? (a.number ?? a.order ?? 0) - (b.number ?? b.order ?? 0) : a.type === 'active' ? -1 : 1))
-    .map((b) => `<option value="${esc(b.id)}"${b.id === line.bin_id ? ' selected' : ''}>${esc(bins.binLabel(b, ctx.setsByNum))}</option>`).join('');
+    .map((b) => `<option value="${esc(b.id)}"${b.id === binVal ? ' selected' : ''}>${esc(bins.binLabel(b, ctx.setsByNum))}</option>`).join('');
   const unrec = !line.part_num;
 
   const { value, data } = await openDialog(`
     <h2>${esc(line.name)}</h2>
     <p class="hint">${unrec ? 'Unidentified piece' : esc(line.part_num)}</p>
     <label for="eq">Quantity</label>
-    <input id="eq" name="qty" type="number" min="1" max="9999" step="1" required value="${line.qty}" inputmode="numeric">
+    <input id="eq" name="qty" type="number" min="1" max="9999" step="1" required value="${esc(qtyVal)}" inputmode="numeric">
     <label for="ec">Colour</label>
-    <select id="ec" name="color">${colorOptions}</select>
+    <input type="hidden" name="color" value="${curColorId}">
+    <button type="submit" value="pickcolor" formnovalidate class="colorbtn" id="ec"><span class="swatch lg${/^Trans/i.test(colorName || '') ? ' trans' : ''}" style="--c:#${esc(safeRgb(colorRgb))}"></span><span>${esc(colorName)}</span></button>
     <label for="eb">Bin</label>
     <select id="eb" name="bin">${binOptions}</select>
     <fieldset class="scope">
       <legend>Flags</legend>
-      <label><input type="checkbox" name="sticker"${line.sticker ? ' checked' : ''}> Sticker</label>
-      <label><input type="checkbox" name="printed"${line.printed ? ' checked' : ''}> Printed part</label>
-      <label><input type="checkbox" name="other"${line.other ? ' checked' : ''}> Other</label>
+      <label><input type="checkbox" name="sticker"${fl('sticker') ? ' checked' : ''}> Sticker</label>
+      <label><input type="checkbox" name="printed"${fl('printed') ? ' checked' : ''}> Printed part</label>
+      <label><input type="checkbox" name="other"${fl('other') ? ' checked' : ''}> Other</label>
     </fieldset>
     <label for="en">Note</label>
-    <input id="en" name="note" maxlength="200" value="${esc(line.note || '')}">
+    <input id="en" name="note" maxlength="200" value="${esc(noteVal)}">
     <div class="row spread">
       <button class="btn danger" value="delete" formnovalidate>Delete</button>
       <span class="grow"></span>
@@ -488,6 +524,19 @@ async function editLine(line, ctx) {
       <button class="btn primary" value="save">Save</button>
     </div>`, { data: true });
 
+  if (value === 'pickcolor') {
+    // Only one dialog can be open at a time: keep what was typed, pick a colour, then reopen.
+    const keep = {
+      qty: String(data.get('qty') || ''), bin: String(data.get('bin')), note: String(data.get('note') || ''),
+      flags: { sticker: data.has('sticker'), printed: data.has('printed'), other: data.has('other') },
+      color: Number(data.get('color')),
+    };
+    await refreshInfo();
+    await loadColorState();
+    const picked = await pickColor(keep.color);
+    if (picked !== null) keep.color = picked;
+    return editLine(line, ctx, keep);
+  }
   const now = new Date().toISOString();
   if (value === 'delete') {
     if (!(await ask({ title: 'Delete this line?', body: `${fmt(line.qty)} × ${line.name} (${line.color_name}) will be removed from the app.`, ok: 'Delete', danger: true }))) return false;

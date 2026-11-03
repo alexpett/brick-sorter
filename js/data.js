@@ -32,6 +32,7 @@ export function loadRef() {
       name: c[1],
       rgb: /^[0-9a-f]{6}$/i.test(c[2]) ? c[2] : '999999',
       is_trans: !!c[3],
+      popularity: Number(c[4]) || 0,
     }));
     ref.colorById = new Map(ref.colors.map((c) => [c.id, c]));
     ref.categories = new Map(Object.entries(cats).map(([k, v]) => [Number(k), v]));
@@ -74,6 +75,29 @@ export function pickerColors() {
   return ref.colors
     .filter((c) => c.id !== -1 && c.id !== 9999)
     .sort((a, b) => Number(a.is_trans) - Number(b.is_trans) || a.name.localeCompare(b.name));
+}
+
+// Groups shown in the picker's "All" tab, in this order.
+export const COLOR_GROUPS = ['Black & white', 'Greys', 'Reds', 'Oranges & yellows', 'Greens', 'Blues', 'Pinks & purples', 'Browns', 'Metallic', 'Translucent'];
+
+export function colorGroup(c) {
+  const n = c.name.toLowerCase();
+  if (c.is_trans) return 'Translucent';
+  if (/gr[ae]y/.test(n)) return 'Greys';
+  if (/metallic|chrome|pearl|glitter|speckle|copper|silver|gold|bronze/.test(n)) return 'Metallic';
+  if (/(^|\s)(black|white)$/.test(n)) return 'Black & white';
+  if (/brown|\btan\b|nougat|flesh|dark orange/.test(n)) return 'Browns';
+  if (/pink|magenta|purple|lavender|lilac/.test(n)) return 'Pinks & purples';
+  const r = parseInt(c.rgb.slice(0, 2), 16) / 255, g = parseInt(c.rgb.slice(2, 4), 16) / 255, b = parseInt(c.rgb.slice(4, 6), 16) / 255;
+  const mx = Math.max(r, g, b), mn = Math.min(r, g, b), d = mx - mn;
+  if (d < 0.08) return mx < 0.2 || mx > 0.92 ? 'Black & white' : 'Greys';
+  let h = mx === r ? ((g - b) / d) % 6 : mx === g ? (b - r) / d + 2 : (r - g) / d + 4;
+  h = (h * 60 + 360) % 360;
+  if (h < 15 || h >= 345) return 'Reds';
+  if (h < 70) return 'Oranges & yellows';
+  if (h < 165) return 'Greens';
+  if (h < 255) return 'Blues';
+  return 'Pinks & purples';
 }
 
 // Picture for a part. Parts from your sets use the picture Rebrickable gave us;

@@ -41,7 +41,7 @@ def main():
     parts.sort(key=lambda p: natural_key(p[0]))
     dump(parts, os.path.join(out, "parts.json"))
 
-    colors = [[int(r["id"]), r["name"], r["rgb"], 1 if r["is_trans"] == "True" else 0] for r in read(src, "colors.csv")]
+    colors = [[int(r["id"]), r["name"], r["rgb"], 1 if r["is_trans"] == "True" else 0, int(r.get("num_parts") or 0)] for r in read(src, "colors.csv")]
     dump(colors, os.path.join(out, "colors.json"))
 
     cats = {r["id"]: r["name"] for r in read(src, "part_categories.csv")}

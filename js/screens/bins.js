@@ -162,10 +162,13 @@ export async function renderBin(id, keepMode = false) {
   const title = isAll ? 'All pieces' : bins.binLabel(bin, ctx.setsByNum);
   const isActive = !isAll && bin.type === 'active';
   let missing = [];
+  const catOfPart = new Map(); // part number -> the set list's category name (active bins)
   if (isActive) {
     const held = new Map();
     for (const l of lines) held.set(`${l.part_num}|${l.color_id}`, (held.get(`${l.part_num}|${l.color_id}`) || 0) + l.qty);
-    missing = (await db.byIndex('setParts', 'set_num', bin.set_num))
+    const setRows = await db.byIndex('setParts', 'set_num', bin.set_num);
+    for (const r of setRows) if (!catOfPart.has(r.part_num)) catOfPart.set(r.part_num, r.cat_name || 'Other');
+    missing = setRows
       .map((l) => ({ ...l, have: held.get(`${l.part_num}|${l.color_id}`) || 0 }))
       .map((l) => ({ ...l, rem: l.qty - l.have }))
       .filter((l) => l.rem > 0)
@@ -185,6 +188,35 @@ export async function renderBin(id, keepMode = false) {
       m.avail = m.stock.reduce((n, x) => n + x.line.qty, 0);
     }
   }
+  if (isActive) lines.sort((a, b) => (catOfPart.get(a.part_num) || 'Other').localeCompare(catOfPart.get(b.part_num) || 'Other') || (a.name || '').localeCompare(b.name || '') || a.color_name.localeCompare(b.color_name));
+  // Active bins show the same category headings as the set's parts list.
+  const groupByCategory = (cats) => {
+    const ul = listEl.querySelector('ul.parts');
+    if (!ul) return;
+    const lis = [...ul.children];
+    const out = document.createDocumentFragment();
+    let cur = null;
+    let curUl = null;
+    let head = null;
+    let n = 0;
+    const flush = () => { if (head) head.innerHTML = `${esc(cur)} <small>${n}</small>`; };
+    lis.forEach((li, i) => {
+      if (cats[i] !== cur) {
+        flush();
+        cur = cats[i];
+        n = 0;
+        head = document.createElement('h3');
+        head.className = 'cat';
+        curUl = document.createElement('ul');
+        curUl.className = 'parts';
+        out.append(head, curUl);
+      }
+      curUl.append(li);
+      n++;
+    });
+    flush();
+    listEl.replaceChildren(out);
+  };
   const pickCount = missing.filter((m) => m.avail > 0).length;
   const missingCount = missing.reduce((n, l) => n + l.rem, 0);
   setTitle(isAll ? 'All pieces' : bin.type === 'active' ? `Bin ${bin.number}` : bin.label);
@@ -281,6 +313,7 @@ export async function renderBin(id, keepMode = false) {
             <button type="button" class="btn small" data-found="${esc(l.id)}">Found</button>
           </span>
         </li>`).join('')}</ul>`;
+      groupByCategory(shown.map((l) => l.cat_name || 'Other'));
       return;
     }
     const pool = shownLines.filter(byColor);
@@ -314,6 +347,7 @@ export async function renderBin(id, keepMode = false) {
         ${canMove ? `<div class="moverow"><button type="button" class="btn small${wants.length ? ' primary' : ''}" data-move="${esc(l.id)}">${wants.length ? `Move to Bin ${wants[0].bin.number}…` : 'Move…'}</button></div>` : ''}
       </li>`;
     }).join('')}</ul>`;
+    if (isActive) groupByCategory(shown.map((l) => catOfPart.get(l.part_num) || 'Other'));
   };
   drawChips();
   draw('');

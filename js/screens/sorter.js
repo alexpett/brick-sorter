@@ -88,9 +88,7 @@ export function pickColor(current = colorId) {
     const d = $('#dlg');
     let tab = recent.length ? 'recent' : 'yours';
     let filter = '';
-    const open = new Set();
-    const cur = current === null ? null : colorOf(current);
-    if (cur) open.add(refdata.colorGroup(cur));
+    let open = null; // the one group that is expanded (none to start with)
     d.innerHTML = `<form method="dialog">
       <h2>Colour</h2>
       <div class="segmented" id="cpTabs" role="tablist"></div>
@@ -125,7 +123,7 @@ export function pickColor(current = colorId) {
       box.innerHTML = `<div class="cgroups">${refdata.COLOR_GROUPS.map((g) => {
         const list = all.filter((c) => refdata.colorGroup(c) === g).sort(byRank);
         if (!list.length) return '';
-        const isOpen = open.has(g);
+        const isOpen = open === g;
         return `<section class="cgroup">
           <button type="button" class="cghead" data-group="${esc(g)}" aria-expanded="${isOpen}">
             <span class="cgname">${esc(g)} <small>${list.length}</small></span>
@@ -139,7 +137,17 @@ export function pickColor(current = colorId) {
     d.onclick = (e) => {
       const t = e.target.closest('[data-tab],[data-color],[data-group]');
       if (!t) return;
-      if (t.dataset.group) { const g = t.dataset.group; if (open.has(g)) open.delete(g); else open.add(g); draw(); return; }
+      if (t.dataset.group) {
+        const g = t.dataset.group;
+        open = open === g ? null : g;
+        draw();
+        if (open) { // bring the opened group to the top of the list
+          const head = [...d.querySelectorAll('.cghead')].find((h) => h.dataset.group === g);
+          const box = d.querySelector('.cgroups');
+          if (head && box) box.scrollTop += head.getBoundingClientRect().top - box.getBoundingClientRect().top - 4;
+        }
+        return;
+      }
       if (t.dataset.tab) { tab = t.dataset.tab; filter = ''; const f = d.querySelector('#cfilter'); f.value = ''; draw(); return; }
       d.close(t.dataset.color);
     };
@@ -399,7 +407,7 @@ export function createSorter(el, { onSaved, onChangePart } = {}) {
       case 'changePart': st.part = null; renderTop(); onChangePart?.(); break;
       case 'colorBtn': {
         const id = await pickColor();
-        if (id !== null) { await chooseColor(id); renderTop(); }
+        if (id !== null) { st.sugOpen = false; await chooseColor(id); renderTop(); }
         break;
       }
       case 'qtyMinus': case 'qtyPlus': {

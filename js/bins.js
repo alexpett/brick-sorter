@@ -188,8 +188,13 @@ export async function removeRule(kind, key) {
 }
 
 // items: [{ binId, qty }]. Identical pieces in the same bin are merged into one line.
-export async function saveToBins({ part, color, flags, note, items }) {
+export async function saveToBins({ part, color, flags, note, items, log = true }) {
   const now = nowIso();
+  if (log) {
+    for (const it of items) {
+      await db.put('log', { id: uid(), t: now, qty: it.qty, part_num: part.part_num || '', bin_id: it.binId, updated: now, deleted: false });
+    }
+  }
   for (const it of items) {
     const lines = await binLines(it.binId);
     const same = lines.find((l) => l.part_num === part.part_num && l.color_id === color.id

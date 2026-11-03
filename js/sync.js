@@ -4,7 +4,7 @@
 import * as db from './db.js';
 
 const TABLES = ['sets', 'bins', 'inventory'];
-const SETTING_KEYS = ['categoryMap', 'partOverrides', 'recentColors', 'lastColor'];
+const SETTING_KEYS = ['categoryMap', 'partOverrides', 'recentColors', 'lastColor', 'dailyGoal', 'badgesSeen', 'goalDay'];
 const CHUNK = 400;
 
 export const state = { running: false, error: '', lastAt: '', pending: 0 };
@@ -63,9 +63,17 @@ export async function test(cfg) {
   return call(cfg, { action: 'ping' });
 }
 
+// The activity log needs the newer script. Until the script says it understands it (v >= 2),
+// log entries are held back, not sent and not marked as sent.
+const scriptHasLog = async () => Number((await db.getSetting('scriptV')) || 0) >= 2;
+
 async function pendingRecords(since) {
-  const out = { sets: [], bins: [], inventory: [], settings: [] };
+  const out = { sets: [], bins: [], inventory: [], settings: [], log: [] };
   for (const t of TABLES) out[t] = (await db.all(t)).filter((r) => (r.updated || '') > since);
+  if (await scriptHasLog()) {
+    const logSince = (await db.getSetting('lastLogPushAt')) || '';
+    out.log = (await db.all('log')).filter((r) => (r.updated || '') > logSince);
+  }
   for (const k of SETTING_KEYS) {
     const row = await db.get('kv', k);
     if (row && (row.updated || '') > since) out.settings.push(row);
@@ -76,7 +84,7 @@ async function pendingRecords(since) {
 export async function countPending() {
   const since = (await db.getSetting('lastPushAt')) || '';
   const p = await pendingRecords(since);
-  state.pending = p.sets.length + p.bins.length + p.inventory.length + p.settings.length;
+  state.pending = p.sets.length + p.bins.length + p.inventory.length + p.settings.length + p.log.length;
   return state.pending;
 }
 
@@ -84,7 +92,7 @@ async function apply(pulled) {
   let n = 0;
   db.setQuiet(true);
   try {
-    for (const t of TABLES) {
+    for (const t of [...TABLES, 'log']) {
       for (const rec of pulled[t] || []) {
         const key = t === 'sets' ? rec.set_num : rec.id;
         const local = await db.get(t, key);
@@ -121,9 +129,10 @@ export async function syncNow() {
     const since = (await db.getSetting('lastPushAt')) || '';
     let seq = Number((await db.getSetting('syncSeq')) || 0);
     const pending = await pendingRecords(since);
+    const hadLog = await scriptHasLog();
 
     const flat = [];
-    for (const t of [...TABLES, 'settings']) for (const rec of pending[t]) flat.push([t, rec]);
+    for (const t of [...TABLES, 'settings', 'log']) for (const rec of pending[t]) flat.push([t, rec]);
     const batches = [];
     for (let i = 0; i < flat.length; i += CHUNK) batches.push(flat.slice(i, i + CHUNK));
     if (!batches.length) batches.push([]);
@@ -131,15 +140,17 @@ export async function syncNow() {
     let pushed = 0;
     let pulledCount = 0;
     for (const batch of batches) {
-      const changes = { sets: [], bins: [], inventory: [], settings: [] };
+      const changes = { sets: [], bins: [], inventory: [], settings: [], log: [] };
       for (const [t, rec] of batch) changes[t].push(rec);
       const res = await call(cfg, { since: Number((await db.getSetting('syncSeq')) || 0), changes });
       pushed += batch.length;
       pulledCount += await apply(res.changes || {});
       seq = res.seq;
+      if (res.v >= 2 && !hadLog) { await db.setSetting('scriptV', res.v); schedule(500); }
       await db.setSetting('syncSeq', seq);
     }
     await db.setSetting('lastPushAt', startedAt);
+    if (hadLog) await db.setSetting('lastLogPushAt', startedAt);
     state.lastAt = new Date().toISOString();
     await db.setSetting('lastSyncAt', state.lastAt);
     await countPending();
@@ -156,6 +167,7 @@ export async function syncNow() {
 // Forget the sync position so the next sync sends everything and pulls everything.
 export async function resetCursor() {
   await db.setSetting('lastPushAt', '');
+  await db.setSetting('lastLogPushAt', '');
   await db.setSetting('syncSeq', 0);
 }
 

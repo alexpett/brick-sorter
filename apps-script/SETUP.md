@@ -34,3 +34,7 @@ The camera first tries to send photos to Brickognize straight from the browser. 
 ## Changing the script later
 
 After editing the script, choose **Deploy > Manage deployments**, edit the deployment, pick **New version** and deploy. The address stays the same.
+
+## Updating for goals and badges
+
+The goals, streaks and badges keep a small activity log (one row per save). To back it up and share it between devices, paste the current `Code.gs` into the script and deploy a new version (Deploy → Manage deployments → edit → New version). Until you do, the log stays on each device and nothing is lost; it is sent the first time the app sees the updated script.

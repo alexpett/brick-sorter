@@ -4,6 +4,7 @@ import * as db from '../db.js';
 import * as refdata from '../data.js';
 import * as bins from '../bins.js';
 import { $, esc, fmt, toast, notify, openDialog } from '../ui.js';
+import { celebrate } from '../rewards.js';
 
 const MAX_RECENT = 6;
 const FLAGS = [['sticker', 'Sticker'], ['printed', 'Printed'], ['other', 'Other']];
@@ -361,6 +362,7 @@ export function createSorter(el, { onSaved, onChangePart } = {}) {
           title: `${fmt(keep)} still to place`,
           body: `${b0?.type === 'active' ? `Bin ${b0.number}` : 'That bin'} only needed ${fmt(items[0].qty)}, so ${fmt(items[0].qty)} ${items[0].qty === 1 ? 'was' : 'were'} saved there. The other ${fmt(keep)} need to go in a different bin — choose one now.`,
         });
+        await celebrate();
         return;
       }
       st.part = null;
@@ -369,6 +371,7 @@ export function createSorter(el, { onSaved, onChangePart } = {}) {
       st.flags = { sticker: false, printed: false, other: false };
       renderTop();
       onSaved?.();
+      await celebrate();
     } catch (e) {
       toast(e.message || 'Could not save.');
     } finally {

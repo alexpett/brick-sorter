@@ -3,6 +3,7 @@ import * as db from '../db.js';
 import * as refdata from '../data.js';
 import * as bins from '../bins.js';
 import { view, esc, fmt, toast, openDialog, ask, setTitle, safeRgb } from '../ui.js';
+import { celebrate } from '../rewards.js';
 import { pickColor, refreshInfo, loadColorState } from './sorter.js';
 
 const partCount = (lines) => bins.sumQty(lines);
@@ -329,7 +330,7 @@ export async function renderBin(id, keepMode = false) {
     const fb = e.target.closest('[data-found]');
     if (fb) {
       const row = missing.find((l) => l.id === fb.dataset.found);
-      if (row && await markFound(row, bin)) await renderBin(id, true);
+      if (row && await markFound(row, bin)) { await renderBin(id, true); await celebrate(); }
       return;
     }
     const btn = e.target.closest('[data-line]');
@@ -471,6 +472,7 @@ async function takeFromStorage(row, bin) {
     flags: { sticker: !!row.sticker, printed: false, other: false },
     note: '',
     items: [{ binId: bin.id, qty }],
+    log: false, // a move from storage isn't new sorting
   });
   toast(`Moved ${fmt(qty)} × ${row.name} to Bin ${bin.number}`);
   return true;

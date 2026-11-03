@@ -1,6 +1,6 @@
 // Tiny IndexedDB wrapper with an in-memory fallback (used if the browser blocks storage).
 const DB_NAME = 'brick-sorter';
-const DB_VERSION = 2;
+const DB_VERSION = 3;
 
 const SCHEMA = {
   kv: { keyPath: 'key', indexes: [] },
@@ -9,6 +9,7 @@ const SCHEMA = {
   categories: { keyPath: 'id', indexes: [] },
   bins: { keyPath: 'id', indexes: [] },
   inventory: { keyPath: 'id', indexes: [['bin_id', 'bin_id']] },
+  log: { keyPath: 'id', indexes: [] }, // one entry per save: when, how many (feeds goals and badges)
 };
 
 export let persistent = true;

@@ -2,7 +2,7 @@
  * Brick Sorter sync - Google Apps Script
  *
  * Paste this into the Apps Script editor of the Google Sheet you want to use as the backup
- * (Extensions > Apps Script), set SECRET_CODE below, then Deploy > New deployment > Web app.
+ * (Extensions > Apps Script), save SECRET_CODE as a script property, then Deploy > New deployment > Web app.
  * See SETUP.md for the step-by-step version.
  *
  * The sheet gets one tab per kind of data (sets, bins, inventory, settings). Each row is one
@@ -10,12 +10,10 @@
  * The newest "updated" time wins when the same record is changed in two places.
  */
 
-// Your secret code. Best: save it as a script property named SECRET_CODE (Project Settings >
-// Script properties), so it never sits in the code. Otherwise paste it between the quotes below.
-const SECRET_CODE = 'PASTE-YOUR-SECRET-CODE-HERE';
-
+// The secret code is NOT in this file. Save it as a script property named SECRET_CODE
+// (Project Settings > Script properties > Add script property), with the same value as in the app.
 function secretCode() {
-  return PropertiesService.getScriptProperties().getProperty('SECRET_CODE') || SECRET_CODE;
+  return PropertiesService.getScriptProperties().getProperty('SECRET_CODE') || '';
 }
 
 const TABLES = ['sets', 'bins', 'inventory', 'settings', 'log'];
@@ -31,7 +29,7 @@ function doPost(e) {
   try {
     const body = JSON.parse(e.postData.contents);
     const secret = secretCode();
-    if (secret === 'PASTE-YOUR-SECRET-CODE-HERE') throw new Error('The script has no secret code yet. Add a script property named SECRET_CODE (or edit SECRET_CODE in the script).');
+    if (!secret) throw new Error('The script has no secret code yet. Add a script property named SECRET_CODE (Project Settings > Script properties).');
     if (!body.token || body.token !== secret) throw new Error('Wrong secret code.');
     const lock = LockService.getScriptLock();
     lock.waitLock(30000);

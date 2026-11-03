@@ -6,6 +6,7 @@ import * as sync from './sync.js';
 import { $, view, esc, decode, fmt, safeRgb, setTitle, toast, openDialog, ask } from './ui.js';
 import { renderAdd } from './screens/add.js';
 import { renderScan, stopCamera } from './screens/scan.js';
+import { renderHome } from './screens/home.js';
 import { renderBins, renderBin, confirmAbandon } from './screens/bins.js';
 
 const APP_VERSION = '0.3.0 (stage 3)';
@@ -110,7 +111,9 @@ async function storeSet(info, results, catMap, previous) {
 // ---------- router ----------
 
 const routes = {
-  '': renderSets,
+  '': renderHome,
+  home: renderHome,
+  sets: renderSets,
   set: renderSet,
   add: renderAdd,
   scan: renderScan,
@@ -122,9 +125,10 @@ const routes = {
 async function route() {
   const [, page = '', arg] = (location.hash.slice(1) || '/').split('/');
   stopCamera();
-  const handler = routes[page] || renderSets;
-  const tab = { add: 'add', scan: 'add', bins: 'bins', bin: 'bins', settings: 'settings' }[page] || 'sets';
-  $('#cog')?.classList.toggle('active', tab === 'settings');
+  const handler = routes[page] || renderHome;
+  const tab = { add: 'add', scan: 'add', bins: 'bins', bin: 'bins', sets: 'sets', set: 'sets', settings: 'settings', home: 'home', '': 'home' }[page] || 'home';
+  $('#cog')?.classList.toggle('active', tab === 'settings' || tab === 'home');
+  closeMenu();
   document.querySelectorAll('.tabs a').forEach((a) => {
     a.classList.toggle('active', a.dataset.tab === tab);
     if (a.dataset.tab === tab) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current');
@@ -303,7 +307,7 @@ async function renderSet(setNum) {
   const rec = await db.get('sets', setNum);
   if (!rec || rec.deleted) {
     setTitle('Set not found');
-    view.innerHTML = '<p class="empty">That set isn\'t in your list. <a href="#/">Back to sets</a></p>';
+    view.innerHTML = '<p class="empty">That set isn\'t in your list. <a href="#/sets">Back to sets</a></p>';
     return;
   }
   setTitle(rec.set_num);
@@ -312,7 +316,7 @@ async function renderSet(setNum) {
     || String(a.color_name).localeCompare(String(b.color_name)));
 
   view.innerHTML = `
-    <a class="backlink" href="#/">‹ All sets</a>
+    <a class="backlink" href="#/sets">‹ All sets</a>
     <section class="panel hero">
       <div class="setimg big">${rec.img ? `<img src="${esc(rec.img)}" alt="">` : ''}</div>
       <div>
@@ -372,7 +376,7 @@ async function renderSet(setNum) {
     if (!ok) return;
     await db.delByIndex('setParts', 'set_num', rec.set_num);
     await db.put('sets', { ...rec, deleted: true, updated: new Date().toISOString() });
-    location.hash = '#/';
+    location.hash = '#/sets';
   });
 }
 
@@ -708,6 +712,24 @@ async function setupSyncPanel() {
     await paintSyncPill();
   }
 }
+
+// ---------- header menu (cog) ----------
+
+function closeMenu() {
+  const m = $('#menu');
+  if (m) m.hidden = true;
+  $('#cog')?.setAttribute('aria-expanded', 'false');
+}
+
+$('#cog')?.addEventListener('click', (e) => {
+  e.preventDefault();
+  const m = $('#menu');
+  const open = m.hidden;
+  m.hidden = !open;
+  e.currentTarget.setAttribute('aria-expanded', String(open));
+});
+document.addEventListener('click', (e) => { if (!e.target.closest('#menu, #cog')) closeMenu(); });
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeMenu(); });
 
 // ---------- start ----------
 

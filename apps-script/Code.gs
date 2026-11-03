@@ -95,6 +95,7 @@ function recognise(body) {
   const blob = Utilities.newBlob(Utilities.base64Decode(String(body.image || '')), 'image/jpeg', 'photo.jpg');
   const res = UrlFetchApp.fetch('https://api.brickognize.com/predict/parts/', {
     method: 'post',
+    headers: { 'User-Agent': 'BrickSorter/1.0 (personal LEGO sorting app; github.com/alexpett/brick-sorter)' },
     payload: { query_image: blob },
     muteHttpExceptions: true,
   });

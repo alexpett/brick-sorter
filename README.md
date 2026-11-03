@@ -30,3 +30,7 @@ See [apps-script/SETUP.md](apps-script/SETUP.md) to link a Google Sheet.
 ## Data and credits
 
 Part, colour and category names in `data/` are derived from the [Rebrickable downloads](https://rebrickable.com/downloads/). To refresh them, download the CSVs and run `python3 tools/build-data.py <csv folder>`.
+
+## Brickognize
+
+Camera recognition uses the free [Brickognize](https://brickognize.com) API. Its author confirmed that personal use is welcome, with no daily quota and a limit of five requests per second per IP.

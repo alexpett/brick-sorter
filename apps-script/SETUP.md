@@ -29,7 +29,7 @@ From then on the app backs up a few seconds after each change, when you open it,
 
 ## Camera fallback
 
-The camera first tries to send photos to Brickognize straight from the browser. If the browser blocks that, the app sends the photo through this script instead, which forwards it from Google's servers. For that you need the current `Code.gs` deployed as a new version (see below). The photo is not stored in the sheet.
+The camera first tries to send photos to Brickognize straight from the browser. If the browser blocks that, the app sends the photo through this script instead, which forwards it from Google's servers. For that you need the current `Code.gs` deployed as a new version (see below). The photo is not stored in the sheet. This route also tells Brickognize the app's name in its User-Agent, which they asked for.
 
 ## Changing the script later
 

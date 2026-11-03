@@ -18,7 +18,7 @@ export const safeRgb = (rgb) => (/^[0-9a-f]{6}$/i.test(rgb || '') ? rgb : '99999
 
 export function setTitle(t) {
   $('#title').textContent = t;
-  document.title = t === 'Sets' ? 'Brick Sorter' : `${t} · Brick Sorter`;
+  document.title = t === 'Overview' ? 'Brick Sorter' : `${t} · Brick Sorter`;
 }
 
 let toastTimer;

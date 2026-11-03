@@ -24,6 +24,8 @@ export async function renderBins() {
   await refdata.loadRef().catch(() => {});
   const ctx = await bins.loadContext();
   const count = (id) => partCount(ctx.byBin.get(id) || []);
+  const wm = bins.wantedMap(ctx);
+  const wantedLines = (id) => (ctx.byBin.get(id) || []).filter((l) => l.part_num && wm.has(`${l.part_num}|${l.color_id}`)).length;
   const storage = ctx.bins.filter((b) => b.type === 'storage').sort((a, b) => (a.order || 0) - (b.order || 0));
 
   const activeHtml = ctx.active.length
@@ -57,7 +59,7 @@ export async function renderBins() {
             <span class="binchip store big"${bins.chipStyle(b)}>${esc(b.label.slice(0, 2).toUpperCase())}</span>
             <div class="cardtext">
               <div class="cardname">${esc(b.label)}</div>
-              <div class="cardmeta">${fmt(count(b.id))} ${count(b.id) === 1 ? 'piece' : 'pieces'}${b.desc ? ` · ${esc(b.desc)}` : ''}</div>
+              <div class="cardmeta">${fmt(count(b.id))} ${count(b.id) === 1 ? 'piece' : 'pieces'}${b.desc ? ` · ${esc(b.desc)}` : ''}${wantedLines(b.id) ? ` · <span class="tag ok">${wantedLines(b.id)} ${wantedLines(b.id) === 1 ? 'line' : 'lines'} wanted by active sets</span>` : ''}</div>
             </div>
             <span class="chev" aria-hidden="true">›</span>
           </a>
@@ -138,9 +140,10 @@ async function drawRules() {
 let binMode = 'missing'; // 'missing' | 'found' for active bins
 let pickOnly = false; // missing list: only pieces that are sitting in storage
 let colorFilter = null; // colour id chosen in the bin's colour chips
+let neededOnly = false; // storage bin: only lines an active set still wants
 
 export async function renderBin(id, keepMode = false) {
-  if (!keepMode) { binMode = 'missing'; pickOnly = false; colorFilter = null; }
+  if (!keepMode) { binMode = 'missing'; pickOnly = false; colorFilter = null; neededOnly = false; }
   const ctx = await bins.loadContext();
   const isAll = id === 'all';
   const bin = isAll ? null : ctx.bins.find((b) => b.id === id);
@@ -153,6 +156,9 @@ export async function renderBin(id, keepMode = false) {
   const lines = isAll ? [...ctx.byBin.values()].flat() : (ctx.byBin.get(bin.id) || []);
   lines.sort((a, b) => (a.name || '').localeCompare(b.name || '') || a.color_name.localeCompare(b.color_name));
 
+  const wm = bins.wantedMap(ctx);
+  const wantedFor = (l) => (l.part_num && (wm.get(`${l.part_num}|${l.color_id}`) || [])) || [];
+  const wantedCount = lines.filter((l) => wantedFor(l).length && ctx.bins.find((b) => b.id === l.bin_id)?.type === 'storage').length;
   const title = isAll ? 'All pieces' : bins.binLabel(bin, ctx.setsByNum);
   const isActive = !isAll && bin.type === 'active';
   let missing = [];
@@ -216,6 +222,7 @@ export async function renderBin(id, keepMode = false) {
         <button type="button" role="tab" data-mode="found" aria-selected="${binMode === 'found'}">Found (${fmt(partCount(lines))})</button>
  </div>
       ${binMode === 'missing' && pickCount ? `<button type="button" class="chip pickchip" id="pickToggle" aria-pressed="${pickOnly}">In storage: ${fmt(pickCount)} ${pickCount === 1 ? 'part' : 'parts'} to pick</button>` : ''}` : ''}
+      ${!isActive && wantedCount ? `<button type="button" class="chip pickchip" id="neededToggle" aria-pressed="${neededOnly}">Wanted by active sets: ${fmt(wantedCount)} ${wantedCount === 1 ? 'line' : 'lines'}</button>` : ''}
       <label for="filter" class="sr">Filter pieces</label>
       <input id="filter" type="search" placeholder="Filter by name, part number or colour" autocomplete="off">
       <div class="flagrow colorchips" id="colorChips" role="group" aria-label="Filter by colour"></div>
@@ -227,7 +234,8 @@ export async function renderBin(id, keepMode = false) {
   const match = (l, q) => `${l.name} ${l.part_num} ${l.color_name} ${l.note || ''}`.toLowerCase().includes(q);
   const byColor = (l) => colorFilter === null || l.color_id === colorFilter;
   const showMissing = isActive && binMode === 'missing';
-  const basePool = showMissing ? (pickOnly ? missing.filter((l) => l.avail > 0) : missing) : lines;
+  const shownLines = neededOnly && !isActive ? lines.filter((l) => wantedFor(l).length && ctx.bins.find((b) => b.id === l.bin_id)?.type === 'storage') : lines;
+  const basePool = showMissing ? (pickOnly ? missing.filter((l) => l.avail > 0) : missing) : shownLines;
   // Colour chips: the colours in this list, most pieces first.
   const chipMap = new Map();
   for (const l of basePool) {
@@ -275,7 +283,7 @@ export async function renderBin(id, keepMode = false) {
         </li>`).join('')}</ul>`;
       return;
     }
-    const pool = lines.filter(byColor);
+    const pool = shownLines.filter(byColor);
     const shown = needle ? pool.filter((l) => match(l, needle)) : pool;
     $('#count').textContent = `${pl(partCount(shown), 'piece', 'pieces')} in ${pl(shown.length, 'line', 'lines')}`;
     if (!shown.length) {
@@ -285,8 +293,11 @@ export async function renderBin(id, keepMode = false) {
     listEl.innerHTML = `<ul class="parts">${shown.map((l) => {
       const b = isAll ? ctx.bins.find((x) => x.id === l.bin_id) : null;
       const url = l.part_num ? refdata.partImg(l.part_num, l.color_id, null) : null;
+      const inStore = ctx.bins.find((x) => x.id === l.bin_id)?.type === 'storage';
+      const wants = inStore ? wantedFor(l) : [];
+      const canMove = wants.length || (!inStore && l.part_num && b?.type !== 'storage' && (isAll ? b?.type === 'active' : isActive));
       return `
-      <li class="part">
+      <li class="part${canMove ? ' haswrap' : ''}">
         <button type="button" class="linebtn" data-line="${esc(l.id)}">
           <span class="thumb">${url ? `<img src="${esc(url)}" alt="" loading="lazy">` : ''}</span>
           <span class="pinfo">
@@ -295,10 +306,12 @@ export async function renderBin(id, keepMode = false) {
               <span class="swatch${/^Trans/i.test(l.color_name) ? ' trans' : ''}" style="--c:#${esc(l.rgb)}"></span>
               ${esc(l.color_name)}${l.part_num ? ` · ${esc(l.part_num)}` : ''}${tagsHtml(l)}${b ? ` · ${esc(b.type === 'active' ? `Bin ${b.number}` : b.label)}` : ''}
               ${l.note ? `<br><em>${esc(l.note)}</em>` : ''}
+              ${wants.length ? `<br><span class="tag ok">Wanted: ${wants.map((w) => `Bin ${w.bin.number} (${fmt(w.rem)})`).join(', ')}</span>` : ''}
             </span>
           </span>
           <span class="qty">${fmt(l.qty)}</span>
         </button>
+        ${canMove ? `<div class="moverow"><button type="button" class="btn small${wants.length ? ' primary' : ''}" data-move="${esc(l.id)}">${wants.length ? `Move to Bin ${wants[0].bin.number}…` : 'Move…'}</button></div>` : ''}
       </li>`;
     }).join('')}</ul>`;
   };
@@ -319,6 +332,7 @@ export async function renderBin(id, keepMode = false) {
     binMode = m.dataset.mode;
     renderBin(id, true);
   });
+  $('#neededToggle')?.addEventListener('click', () => { neededOnly = !neededOnly; renderBin(id, true); });
   $('#pickToggle')?.addEventListener('click', () => { pickOnly = !pickOnly; renderBin(id, true); });
   listEl.addEventListener('click', async (e) => {
     const tb = e.target.closest('[data-take]');
@@ -331,6 +345,12 @@ export async function renderBin(id, keepMode = false) {
     if (fb) {
       const row = missing.find((l) => l.id === fb.dataset.found);
       if (row && await markFound(row, bin)) { await renderBin(id, true); await celebrate(); }
+      return;
+    }
+    const mv = e.target.closest('[data-move]');
+    if (mv) {
+      const ln = lines.find((l) => l.id === mv.dataset.move);
+      if (ln && await moveLineDialog(ln, ctx, wm)) { await renderBin(id, true); await celebrate(); }
       return;
     }
     const btn = e.target.closest('[data-line]');
@@ -476,6 +496,41 @@ async function takeFromStorage(row, bin) {
   });
   toast(`Moved ${fmt(qty)} × ${row.name} to Bin ${bin.number}`);
   return true;
+}
+
+// Moves some or all of a line to another bin, in either direction. Nothing moves until you confirm.
+async function moveLineDialog(line, ctx, wm) {
+  const k = `${line.part_num}|${line.color_id}`;
+  const wants = line.part_num ? (wm.get(k) || []).filter((w) => w.bin.id !== line.bin_id) : [];
+  const wantRem = new Map(wants.map((w) => [w.bin.id, w.rem]));
+  const cur = ctx.bins.find((b) => b.id === line.bin_id);
+  const opts = ctx.bins
+    .filter((b) => !b.deleted && b.id !== line.bin_id && b.id !== 'unrecognised' && (b.type === 'storage' || wantRem.has(b.id)))
+    .sort((a, b) => (wantRem.has(b.id) ? 0 : 1) - (wantRem.has(a.id) ? 0 : 1) || (a.type === b.type ? (a.number ?? a.order ?? 0) - (b.number ?? b.order ?? 0) : a.type === 'active' ? -1 : 1));
+  if (!opts.length) { toast('There is nowhere to move this to.'); return false; }
+  const dflt = cur?.type === 'storage' ? opts.find((b) => wantRem.has(b.id)) || opts[0]
+    : opts.find((b) => b.type === 'storage' && b.id === bins.resolveStorage(ctx, { part_num: line.part_num, cat_id: line.cat_id })) || opts.find((b) => b.type === 'storage') || opts[0];
+  const startQty = wantRem.has(dflt.id) ? Math.min(line.qty, wantRem.get(dflt.id)) : line.qty;
+  const { value, data } = await openDialog(`
+    <h2>${esc(line.name)}</h2>
+    <p class="hint">${esc(line.color_name)}${line.part_num ? ` · ${esc(line.part_num)}` : ''} · ${fmt(line.qty)} in ${esc(cur ? bins.binLabel(cur, ctx.setsByNum) : 'this bin')}</p>
+    <label for="mq">How many are you moving?</label>
+    <input id="mq" name="qty" type="number" inputmode="numeric" min="1" max="${line.qty}" step="1" required value="${startQty}">
+    <label for="mb">To</label>
+    <select id="mb" name="bin">${opts.map((b) => `<option value="${esc(b.id)}"${b.id === dflt.id ? ' selected' : ''}>${esc(bins.binLabel(b, ctx.setsByNum))}${wantRem.has(b.id) ? ` — needs ${fmt(wantRem.get(b.id))}` : ''}</option>`).join('')}</select>
+    <div class="row">
+      <button class="btn" value="cancel" formnovalidate>Cancel</button>
+      <button class="btn primary" value="ok">Move</button>
+    </div>`, { data: true });
+  if (value !== 'ok') return false;
+  try {
+    const to = await bins.moveLine(ctx, line, String(data.get('bin')), Number(data.get('qty')));
+    toast(`Moved ${fmt(Number(data.get('qty')))} × ${line.name} to ${to.type === 'active' ? `Bin ${to.number}` : to.label}`);
+    return true;
+  } catch (e) {
+    toast(e.message || 'Could not move that.');
+    return false;
+  }
 }
 
 // ---------- Edit one line ----------

@@ -225,6 +225,47 @@ export async function saveToBins({ part, color, flags, note, items, log = true }
   }
 }
 
+// Which active bins still want each part+colour: Map 'part|colour' -> [{ bin, rem }].
+export function wantedMap(ctx) {
+  const m = new Map();
+  for (const a of ctx.active) {
+    for (const [k, need] of a.need) {
+      const rem = need - (a.held.get(k) || 0);
+      if (rem <= 0) continue;
+      if (!m.has(k)) m.set(k, []);
+      m.get(k).push({ bin: a.bin, rem });
+    }
+  }
+  for (const list of m.values()) list.sort((x, y) => x.bin.number - y.bin.number);
+  return m;
+}
+
+// Moves qty of an existing line into another bin (not new sorting, so no activity-log entry).
+// An active bin only accepts what its set still needs.
+export async function moveLine(ctx, line, toBinId, qty) {
+  const to = ctx.bins.find((b) => b.id === toBinId && !b.deleted);
+  if (!to || to.id === line.bin_id) throw new Error('Choose a different bin.');
+  if (!Number.isInteger(qty) || qty < 1 || qty > line.qty) throw new Error(`Enter a number from 1 to ${line.qty}.`);
+  if (to.type === 'active' && line.part_num) {
+    const a = ctx.active.find((x) => x.bin.id === to.id);
+    const k = `${line.part_num}|${line.color_id}`;
+    const rem = a ? (a.need.get(k) || 0) - (a.held.get(k) || 0) : 0;
+    if (rem <= 0) throw new Error(`Bin ${to.number}'s set doesn't need this piece in that colour.`);
+    if (qty > rem) throw new Error(`Bin ${to.number} only needs ${rem} more of this piece.`);
+  }
+  const now = nowIso();
+  await db.put('inventory', qty === line.qty ? { ...line, qty: 0, deleted: true, updated: now } : { ...line, qty: line.qty - qty, updated: now });
+  await saveToBins({
+    part: { part_num: line.part_num, name: line.name, cat_id: line.cat_id },
+    color: { id: line.color_id, name: line.color_name, rgb: line.rgb },
+    flags: { sticker: !!line.sticker, printed: !!line.printed, other: !!line.other },
+    note: line.note || '',
+    items: [{ binId: to.id, qty }],
+    log: false,
+  });
+  return to;
+}
+
 export async function addStorageBin(label) {
   const clean = label.trim().slice(0, 30);
   if (!clean) throw new Error('Give the bin a name.');

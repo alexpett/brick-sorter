@@ -520,3 +520,7 @@ dialog .colorbtn { width: 100%; }
 .cel-line { font-size: 1.05rem; margin: 10px 0; }
 .cel-icon { font-size: 1.6rem; vertical-align: middle; }
 @media (prefers-reduced-motion: reduce) { .ringfg { transition: none; } }
+
+/* moving pieces between bins */
+.part.haswrap { flex-wrap: wrap; }
+.part .moverow { flex-basis: 100%; padding-left: 60px; }

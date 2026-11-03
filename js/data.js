@@ -77,6 +77,19 @@ export function pickerColors() {
     .sort((a, b) => Number(a.is_trans) - Number(b.is_trans) || a.name.localeCompare(b.name));
 }
 
+// The scanner returns BrickLink numbers, which are not always Rebrickable's. Best local guess:
+// drop the print suffix (87079pb0722L -> 87079) and try the usual letter variants (3069 -> 3069b).
+export function guessCatalogue(id) {
+  const lower = String(id).toLowerCase();
+  const base = lower.replace(/pb\d+[a-z]*$/, '').replace(/(pr|pat)\d+[a-z]*$/, '');
+  const tries = [...new Set([base, `${base}b`, `${base}a`, `${base}c`])].filter((x) => x !== lower);
+  for (const t of tries) {
+    const i = ref.byNum.get(t);
+    if (i !== undefined) return { part_num: ref.parts[i][0], name: ref.parts[i][1], cat_id: ref.parts[i][2], approx: true };
+  }
+  return null;
+}
+
 // Groups shown in the picker's "All" tab, in this order.
 export const COLOR_GROUPS = ['Black & white', 'Greys', 'Reds', 'Oranges & yellows', 'Greens', 'Blues', 'Pinks & purples', 'Browns', 'Metallic', 'Translucent'];
 

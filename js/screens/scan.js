@@ -2,6 +2,8 @@
 // and choosing a match opens the sorting panel on the same screen. Saving returns to the camera.
 import * as refdata from '../data.js';
 import * as recog from '../recog.js';
+import * as rb from '../rebrickable.js';
+import * as db from '../db.js';
 import { view, esc, toast, openDialog, setTitle } from '../ui.js';
 import { createSorter, info, refreshInfo, loadColorState, partTag } from './sorter.js';
 
@@ -10,6 +12,7 @@ let root = null;
 let busy = false;
 let sorter = null;
 let lastItems = [];
+const resolved = new Map(); // brickognize id (lower) -> part | null, filled by lookups
 
 export function stopCamera() {
   if (stream) for (const t of stream.getTracks()) t.stop();
@@ -157,6 +160,7 @@ async function handle(source) {
     lastItems = res.items;
     await refreshInfo();
     drawMatches(res.items);
+    resolveMissing(res.items);
   } catch (e) {
     if (root?.isConnected) matches.innerHTML = `<p class="err-text">${esc(e.message || String(e))}</p><p class="hint">Press the round button to try again.</p>${unrecButton()}`;
   } finally {
@@ -166,6 +170,28 @@ async function handle(source) {
 
 const unrecButton = () => '<button class="btn block" id="unrec" type="button">I can’t identify this piece</button>';
 
+// Items whose number isn't in the catalogue: ask Rebrickable which of its parts BrickLink calls that
+// (needs the API key), otherwise fall back to the closest local guess.
+async function resolveMissing(items) {
+  const key = (await db.getSetting('rebrickableKey')) || '';
+  let changed = false;
+  for (const it of items.slice(0, 6)) {
+    const k = it.id.toLowerCase();
+    if (refdata.ref.byNum.has(k) || resolved.has(k)) continue;
+    let part = null;
+    if (key) {
+      try {
+        const r = (await rb.findByBricklink(it.id, key))[0];
+        if (r) part = { part_num: r.part_num, name: r.name, cat_id: r.part_cat_id };
+      } catch { /* fall through to the local guess */ }
+    }
+    resolved.set(k, part || refdata.guessCatalogue(it.id));
+    changed = true;
+    if (root?.isConnected && items === lastItems) drawMatches(items);
+  }
+  void changed;
+}
+
 function drawMatches(items) {
   const matches = $r('#matches');
   if (!items.length) {
@@ -174,13 +200,15 @@ function drawMatches(items) {
   }
   const rows = items.slice(0, 6).map((it) => {
     const idx = refdata.ref.byNum.get(it.id.toLowerCase());
-    const part = idx === undefined ? null : { part_num: refdata.ref.parts[idx][0], name: refdata.ref.parts[idx][1], cat_id: refdata.ref.parts[idx][2] };
+    const part = idx === undefined ? (resolved.get(it.id.toLowerCase()) || null) : { part_num: refdata.ref.parts[idx][0], name: refdata.ref.parts[idx][1], cat_id: refdata.ref.parts[idx][2] };
+    const pending = idx === undefined && !resolved.has(it.id.toLowerCase());
+    const mapped = part && part.part_num.toLowerCase() !== it.id.toLowerCase();
     const score = it.score === null ? '' : `<span class="score">${Math.round(it.score * 100)}%</span>`;
     const inner = `
       <span class="thumb">${it.img ? `<img src="${esc(it.img)}" alt="" loading="lazy">` : ''}</span>
       <span class="pinfo">
         <span class="pname">${esc(part ? part.name : it.name)}</span>
-        <span class="pmeta">${esc(it.id)}${part ? partTag(part.part_num) : ' · not in the parts catalogue'}</span>
+        <span class="pmeta">${esc(it.id)}${part ? `${mapped ? ` → ${esc(part.part_num)}${part.approx ? ' (plain version)' : ''}` : ''}${partTag(part.part_num)}` : pending ? ' · looking up…' : ' · not in the parts catalogue'}</span>
       </span>
       ${score}`;
     return part

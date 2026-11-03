@@ -102,6 +102,12 @@ export function getSetParts(setNum, key, onPage) {
   );
 }
 
+// Rebrickable part(s) that BrickLink knows by this number (the scanner returns BrickLink numbers).
+export async function findByBricklink(id, key) {
+  const data = await call('/parts/', { bricklink_id: id, page_size: 5 }, key);
+  return data.results || [];
+}
+
 export function getCategories(key) {
   return allPages('/part_categories/', { page_size: 1000 }, key);
 }

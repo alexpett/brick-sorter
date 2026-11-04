@@ -194,8 +194,9 @@ export function createSorter(el, { onSaved, onChangePart } = {}) {
   function suggestionsHtml() {
     if (!st.part || st.part.unrec) return '';
     const list = colourSuggestions(st.part.part_num);
-    if (!list.length) return '';
-    if (!st.sugOpen) return `<div class="suggest"><button type="button" class="linkbtn" id="showSug">Show colours needed by your sets (${list.length})</button></div>`;
+    const hasCur = colorId !== null && !!colorOf(colorId);
+    if (!list.length && !hasCur) return '';
+    if (list.length && !st.sugOpen) return `<div class="suggest"><button type="button" class="linkbtn" id="showSug">Show colours needed by your sets (${list.length})</button></div>`;
     return `<div class="suggest">
       <p class="suggest-label">Your current colour and the ones your sets need — tap to use</p>
       <div class="flagrow">${(() => {

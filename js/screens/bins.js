@@ -331,7 +331,7 @@ export async function renderBin(id, keepMode = false) {
     $('#count').textContent = `${pl(partCount(shown), 'piece', 'pieces')} in ${pl(shown.length, 'line', 'lines')}`;
     bulkShown = shown;
     const bulk = $('#bulkRow');
-    const canBulk = bin.type === 'storage' && !isAll && shown.length > 0;
+    const canBulk = bin?.type === 'storage' && !isAll && shown.length > 0;
     bulk.hidden = !canBulk;
     if (canBulk) bulk.innerHTML = `<button type="button" class="btn" id="bulkMove">Move ${colorFilter !== null || needle ? 'these' : 'all'} ${pl(partCount(shown), 'piece', 'pieces')} to another bin…</button>`;
     if (!shown.length) {

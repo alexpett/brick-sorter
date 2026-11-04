@@ -52,11 +52,11 @@ export async function renderBins() {
       ${activeHtml}
     </section>
     <section>
-      <h2 class="section-title">Storage bins</h2>
+      <div class="sectionhead"><h2 class="section-title">Storage bins</h2><button type="button" class="chip addbin" id="addBin">+ Add bin</button></div>
       <ul class="cards">${storage.map((b) => `
         <li>
           <a class="card binrow" href="#/bin/${encodeURIComponent(b.id)}">
-            <span class="binchip store big"${bins.chipStyle(b)}>${esc(b.label.slice(0, 2).toUpperCase())}</span>
+            <span class="binchip store big"${bins.chipStyle(b)}>${esc(bins.binShort(b))}</span>
             <div class="cardtext">
               <div class="cardname">${esc(b.label)}</div>
               <div class="cardmeta">${fmt(count(b.id))} ${count(b.id) === 1 ? 'piece' : 'pieces'}${b.desc ? ` · ${esc(b.desc)}` : ''}${paletteDots(b) ? ` ${paletteDots(b)}` : ''}${b.full ? ' · <span class="tag warn">Full</span>' : ''}${wantedLines(b.id) ? ` · <span class="tag ok">${wantedLines(b.id)} ${wantedLines(b.id) === 1 ? 'line' : 'lines'} wanted by active sets</span>` : ''}</div>
@@ -65,29 +65,11 @@ export async function renderBins() {
           </a>
         </li>`).join('')}</ul>
     </section>
-    <section class="panel">
-      <h2>Add a storage bin</h2>
-      <form id="addBinForm" autocomplete="off">
-        <label for="binName" class="sr">Bin name</label>
-        <div class="inline">
-          <input id="binName" placeholder="e.g. Wheels" maxlength="30">
-          <button class="btn primary">Add</button>
-        </div>
-      </form>
-    </section>
     <a class="btn block" href="#/bin/all">Search all pieces</a>
     <button type="button" class="btn block" id="exportSort">Export sorting data</button>
     <details class="panel rules" id="rules"><summary>Storage rules</summary><div id="rulesBody"></div></details>`;
 
-  $('#addBinForm').addEventListener('submit', async (e) => {
-    e.preventDefault();
-    try {
-      await bins.addStorageBin($('#binName').value);
-      await renderBins();
-    } catch (err) {
-      toast(err.message);
-    }
-  });
+  $('#addBin').addEventListener('click', async () => { if (await editBinDialog(null, ctx, [])) await renderBins(); });
   $('#exportSort').addEventListener('click', async () => {
     try { toast(await exportSorting(ctx)); } catch (err) { toast(err.message || 'Could not export.'); }
   });
@@ -600,7 +582,7 @@ async function takeFromStorage(row, bin) {
 }
 
 // Edit a bin's colours (up to four). Resolves true if saved.
-async function binColourDialog(bin) {
+async function binColourDialog(bin, { draft = false } = {}) {
   let sel = bins.binColors(bin);
   const nameOf = (hex) => {
     const c = [...refdata.ref.colorById.values()].find((x) => `#${x.rgb}`.toLowerCase() === hex.toLowerCase());
@@ -611,7 +593,7 @@ async function binColourDialog(bin) {
     const { value } = await openDialog(`
       <h2>Bin colours</h2>
       <p class="hint">Choose up to four. Two split the bin in half, three give the first a half and the others a quarter each, four are quarters.</p>
-      <div class="binpreview"><span class="binchip big"${bins.chipStyle({ colors: sel })}>${esc((bin.type === 'active' ? `Bin ${bin.number}` : bin.label.slice(0, 2).toUpperCase()))}</span></div>
+      <div class="binpreview"><span class="binchip big"${bins.chipStyle({ colors: sel })}>${esc((bin.type === 'active' ? `Bin ${bin.number}` : bins.binShort(bin)))}</span></div>
       <ul class="bincolors">${sel.map((h, i) => `
         <li><span class="swatch lg" style="--c:${h}"></span><span class="grow">${esc(nameOf(h))} <small>${shares[i]}</small></span>
         <button class="btn small" value="rm${i}" formnovalidate aria-label="Remove ${esc(nameOf(h))}">Remove</button></li>`).join('') || '<li class="hint">No colour yet.</li>'}</ul>
@@ -622,8 +604,8 @@ async function binColourDialog(bin) {
         <button class="btn" value="cancel" formnovalidate>Cancel</button>
         <button class="btn primary" value="save">Save</button>
       </div>`, { data: true });
-    if (!value || value === 'cancel') return false;
-    if (value === 'save') { await bins.setBinColors(bin.id, sel); return true; }
+    if (!value || value === 'cancel') return draft ? null : false;
+    if (value === 'save') { if (draft) return sel; await bins.setBinColors(bin.id, sel); return true; }
     if (value === 'reset') { sel = []; continue; }
     if (value === 'add') {
       const cid = await pickColor(null, { allOnly: true });
@@ -636,35 +618,48 @@ async function binColourDialog(bin) {
   }
 }
 
-// One place for a storage bin's settings: name, colours and sorting rules. Resolves true if anything changed.
+// One place for a storage bin's settings: name, short name, colours and sorting rules. Pass bin = null to
+// make a new bin. Nothing is saved until Save. Resolves true if a bin was created or changed.
 async function editBinDialog(bin, ctx, lines) {
-  let changed = false;
-  let name = bin.label;
-  const fresh = async () => (await bins.getBins()).find((b) => b.id === bin.id) || bin;
+  const isNew = !bin;
+  const d = {
+    label: bin?.label || '', short: bin?.short || '',
+    colors: bins.binColors(bin), palette: bins.binPalette(bin),
+  };
+  let err = '';
   for (;;) {
-    const cur = await fresh();
-    const rule = bins.binPalette(cur).length;
+    const view = { ...(bin || { type: 'storage', label: d.label }), label: d.label, colors: d.colors, color: d.colors[0] || null, palette: d.palette.length ? d.palette : null, short: d.short };
     const { value, data } = await openDialog(`
-      <h2>Edit bin</h2>
+      <h2>${isNew ? 'Add bin' : 'Edit bin'}</h2>
+      ${err ? `<p class="hint err" role="alert">${esc(err)}</p>` : ''}
       <label for="eb">Name</label>
-      <input id="eb" name="name" maxlength="30" required value="${esc(name)}">
+      <input id="eb" name="name" maxlength="30" required autocomplete="off" value="${esc(d.label)}">
+      <label for="es">Short name on the tile <small class="hint">up to 3 characters</small></label>
+      <input id="es" name="short" maxlength="3" autocomplete="off" placeholder="${esc((d.label || 'AB').slice(0, 2).toUpperCase())}" value="${esc(d.short)}">
       <div class="editrows">
-        <button class="btn block editrow" value="colour" formnovalidate><span>Bin colour</span>${bins.binColors(cur).length ? bins.colorSquare(cur) : '<small>Not set</small>'}</button>
-        <button class="btn block editrow" value="rule" formnovalidate><span>Sorting rule · colours</span><small>${rule ? `${rule} ${rule === 1 ? 'colour' : 'colours'}` : 'Any colour'}</small></button>
+        <button class="btn block editrow" value="colour" formnovalidate><span>Bin colour</span>${d.colors.length ? bins.colorSquare(view) : '<small>Not set</small>'}</button>
+        <button class="btn block editrow" value="rule" formnovalidate><span>Sorting rule · colours</span><small>${d.palette.length ? `${d.palette.length} ${d.palette.length === 1 ? 'colour' : 'colours'}` : 'Any colour'}</small></button>
       </div>
       <div class="row spread">
         <button class="btn" value="cancel" formnovalidate>Cancel</button>
-        <button class="btn primary" value="save">Save</button>
+        <button class="btn primary" value="save">${isNew ? 'Add bin' : 'Save'}</button>
       </div>`, { data: true });
-    name = String(data.get('name') || name);
-    if (!value || value === 'cancel') return changed;
-    if (value === 'colour') { if (await binColourDialog(cur)) changed = true; continue; }
-    if (value === 'rule') { if (await colourRuleDialog(cur, ctx, lines)) changed = true; continue; }
+    d.label = String(data.get('name') || '');
+    d.short = String(data.get('short') || '').trim().toUpperCase();
+    err = '';
+    if (!value || value === 'cancel') return false;
+    if (value === 'colour') { const r = await binColourDialog(view, { draft: true }); if (r) d.colors = r; continue; }
+    if (value === 'rule') { const r = await colourRuleDialog(view, ctx, lines || [], { draft: true }); if (r) d.palette = r; continue; }
     if (value === 'save') {
-      if (name.trim() && name.trim() !== bin.label) {
-        try { await bins.renameStorageBin(bin.id, name); changed = true; } catch (err) { toast(err.message); continue; }
-      }
-      return changed;
+      try {
+        let id = bin?.id;
+        if (isNew) id = (await bins.addStorageBin(d.label)).id;
+        else if (d.label.trim() && d.label.trim() !== bin.label) await bins.renameStorageBin(id, d.label);
+        await bins.setBinShort(id, d.short);
+        await bins.setBinColors(id, d.colors);
+        await bins.setBinPalette(id, d.palette);
+        return true;
+      } catch (e) { err = e.message || 'Could not save.'; }
     }
   }
 }
@@ -685,7 +680,7 @@ function paletteRow(bin) {
 }
 
 // Edit which colours a storage bin holds. Resolves true if it was changed.
-async function colourRuleDialog(bin, ctx, lines) {
+async function colourRuleDialog(bin, ctx, lines, { draft = false } = {}) {
   let sel = bins.binPalette(bin);
   const colour = (i) => refdata.ref.colorById.get(i);
   for (;;) {
@@ -701,8 +696,8 @@ async function colourRuleDialog(bin, ctx, lines) {
         <button class="btn" value="cancel" formnovalidate>Cancel</button>
         <button class="btn primary" value="save">Save</button>
       </div>`);
-    if (!value || value === 'cancel') return false;
-    if (value === 'save') { await bins.setBinPalette(bin.id, sel); toast(sel.length ? `${bin.label} now only takes ${sel.length} ${sel.length === 1 ? 'colour' : 'colours'}.` : `${bin.label} takes any colour.`); return true; }
+    if (!value || value === 'cancel') return draft ? null : false;
+    if (value === 'save') { if (draft) return sel; await bins.setBinPalette(bin.id, sel); toast(sel.length ? `${bin.label} now only takes ${sel.length} ${sel.length === 1 ? 'colour' : 'colours'}.` : `${bin.label} takes any colour.`); return true; }
     if (value === 'reset') { sel = []; continue; }
     if (value === 'fromBin') {
       const n = new Map();

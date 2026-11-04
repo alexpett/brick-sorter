@@ -592,3 +592,7 @@ dialog .colorbtn { width: 100%; }
 .editrow small { color: var(--muted); font-size: .85rem; }
 
 .btn.editrow { display: flex; justify-content: space-between; align-items: center; text-align: left; width: 100%; }
+
+.sectionhead { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 20px; }
+.sectionhead .section-title { margin: 0 4px; }
+.addbin { font-weight: 700; color: var(--accent); border-color: var(--accent); background: transparent; cursor: pointer; }

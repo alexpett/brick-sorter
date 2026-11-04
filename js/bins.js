@@ -393,6 +393,18 @@ export async function moveLines(ctx, lines, toBinId) {
   return to;
 }
 
+// The short name on a storage bin's tile: whatever was chosen, else the first two letters.
+export function binShort(bin) {
+  const s = String(bin?.short || '').trim().slice(0, 3);
+  return (s || String(bin?.label || '').slice(0, 2)).toUpperCase();
+}
+
+export async function setBinShort(binId, short) {
+  const bin = await db.get('bins', binId);
+  if (!bin || bin.deleted) throw new Error('Bin not found.');
+  await db.put('bins', { ...bin, short: String(short || '').trim().slice(0, 3) || null, updated: nowIso() });
+}
+
 export async function addStorageBin(label) {
   const clean = label.trim().slice(0, 30);
   if (!clean) throw new Error('Give the bin a name.');

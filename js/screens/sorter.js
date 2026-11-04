@@ -315,7 +315,7 @@ export function createSorter(el, { onSaved, onChangePart } = {}) {
     const take = isActive ? Math.min(q, need) : q;
     const title = isActive ? `Bin ${first.number}${set ? ` · ${set.name}` : ''}` : first.label;
     const sub = isActive ? `Takes ${fmt(take)}${take < q ? ` of ${fmt(q)}` : ''} · set needs ${fmt(need)}` : `Storage · ${fmt(q)} here`;
-    const pic = set?.img ? `<img src="${esc(set.img)}" alt="">` : `<span>${esc(isActive ? String(first.number) : first.label.slice(0, 2).toUpperCase())}</span>`;
+    const pic = set?.img ? `<img src="${esc(set.img)}" alt="">` : `<span>${esc(isActive ? String(first.number) : bins.binShort(first))}</span>`;
     return `<button type="button" class="sugbtn" data-bin="${esc(first.id)}" style="background:${esc(theme.bg)};color:${theme.ink}">
       <span class="sugpic">${pic}</span>
       <span class="sugtext"><strong>${esc(title)}</strong><small>${esc(sub)}</small></span>
@@ -343,7 +343,7 @@ export function createSorter(el, { onSaved, onChangePart } = {}) {
     const storage = usable.filter((b) => b.type === 'storage').sort((a, b) => (a.order || 0) - (b.order || 0));
     const tile = (b) => {
       const isActive = b.type === 'active';
-      const label = isActive ? `Bin ${b.number}` : b.label.slice(0, 2).toUpperCase();
+      const label = isActive ? `Bin ${b.number}` : bins.binShort(b);
       const name = isActive ? (ctx.setsByNum.get(b.set_num)?.name || '') : b.label;
       const s = sugMap.has(b.id);
       // An active bin only takes what its set still needs.

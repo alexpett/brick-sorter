@@ -275,7 +275,7 @@ export function createSorter(el, { onSaved, onChangePart } = {}) {
           <span class="binchip big${isActive ? '' : ' store'}"${bins.chipStyle(b)}>${esc(label)}</span>
           <span class="tilename">${esc(name)}</span>
           ${full ? '<span class="tilebadge full">Full</span>' : ''}
-          ${s && (split || partial) ? `<span class="tilebadge">${fmt(sugMap.get(b.id))}</span>` : ''}
+          ${isActive && !blocked && colorId !== null && !st.part.unrec ? `<span class="tilebadge" title="${fmt(remFor(b))} still needed to complete this set"><span aria-hidden="true">${fmt(remFor(b))}</span><span class="sr">needs ${fmt(remFor(b))} more</span></span>` : ''}
         </button>`;
     };
 
@@ -299,7 +299,21 @@ export function createSorter(el, { onSaved, onChangePart } = {}) {
           <span class="binchip big addchip" aria-hidden="true">+</span>
           <span class="tilename">Add bin</span>
         </button>`;
-    box.innerHTML = `${note}<div class="tiles">${[...active, ...storage].map(tile).join('')}${addTile}</div>`;
+    // Preferred bins come first (the suggestion, in the order it fills them), then the other bins
+    // that can take this piece, and bins that can't (set doesn't need it, storage full) go last.
+    const isBlocked = (b) => (b.type === 'active' && remFor(b) <= 0) || (b.type === 'storage' && !!b.full);
+    let ordered = [...active, ...storage];
+    if (colorId !== null && !st.part.unrec) {
+      const sugOrder = (sug?.dest || []).map((d) => d.binId);
+      const rank = (b) => {
+        const si = sugOrder.indexOf(b.id);
+        if (si >= 0) return si;
+        if (isBlocked(b)) return 1000;
+        return b.type === 'active' ? 100 : 200;
+      };
+      ordered = ordered.map((b, i) => ({ b, i, r: rank(b) })).sort((x, y) => x.r - y.r || x.i - y.i).map((x) => x.b);
+    }
+    box.innerHTML = `${note}<div class="tiles">${ordered.map(tile).join('')}${addTile}</div>`;
   }
 
   // Create a storage bin without leaving the Log screen. The new bin is shown but not chosen.

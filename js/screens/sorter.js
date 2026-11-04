@@ -217,7 +217,7 @@ export function pickColor(current = colorId, { allOnly = false, only = null, mul
 
 // A small "Undo" pill after each save. It fades after a few seconds and only ever undoes the last save.
 let undoEl = null, undoTimer = null;
-function hideUndo() {
+export function hideUndo() {
   clearTimeout(undoTimer);
   if (undoEl) { undoEl.classList.remove('show'); undoEl.disabled = true; }
 }
@@ -227,7 +227,8 @@ function offerUndo(fn) {
     undoEl = document.createElement('button');
     undoEl.type = 'button';
     undoEl.id = 'undoPill';
-    undoEl.textContent = '↶ Undo';
+    undoEl.textContent = '↶';
+    undoEl.setAttribute('aria-label', 'Undo last save');
     document.body.appendChild(undoEl);
     window.addEventListener('hashchange', hideUndo);
   }

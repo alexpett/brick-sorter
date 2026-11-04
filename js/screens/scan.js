@@ -5,7 +5,7 @@ import * as recog from '../recog.js';
 import * as rb from '../rebrickable.js';
 import * as db from '../db.js';
 import { view, esc, toast, openDialog, setTitle } from '../ui.js';
-import { createSorter, info, refreshInfo, loadColorState, partTag } from './sorter.js';
+import { createSorter, hideUndo, info, refreshInfo, loadColorState, partTag } from './sorter.js';
 
 let stream = null;
 let root = null;
@@ -107,6 +107,7 @@ async function select(part) {
 
 async function onClick(e) {
   if (e.target.closest('#shutter')) {
+    hideUndo(); // using the camera again: the last save is settled
     if (busy) return;
     if ($r('#shutter').classList.contains('again')) { showLive(); return; }
     const v = $r('#cam');
@@ -122,7 +123,7 @@ async function onClick(e) {
 async function onFile(e) {
   const f = e.target.files?.[0];
   e.target.value = '';
-  if (f) await handle(f);
+  if (f) { hideUndo(); await handle(f); }
 }
 
 async function consent() {

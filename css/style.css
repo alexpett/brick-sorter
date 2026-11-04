@@ -597,12 +597,14 @@ dialog .colorbtn { width: 100%; }
 .sectionhead .section-title { margin: 0 4px; }
 .addbin { font-weight: 700; color: var(--accent); border-color: var(--accent); background: transparent; cursor: pointer; }
 
-/* quick undo after a save */
+/* quick undo after a save: a round button in a faded tint of the app colour */
 #undoPill {
   position: fixed; right: 14px; z-index: 21;
   bottom: calc(var(--tab-h) + env(safe-area-inset-bottom) + 112px);
-  padding: 9px 16px; border-radius: 999px; border: 0; font: inherit; font-weight: 700;
-  color: #fff; background: rgba(43,39,37,.92); box-shadow: 0 2px 8px rgba(0,0,0,.25);
+  width: 48px; height: 48px; padding: 0; display: grid; place-items: center;
+  border-radius: 50%; border: 0; font: inherit; font-size: 1.6rem; line-height: 1;
+  color: #fff; background: color-mix(in srgb, var(--accent) 62%, transparent);
+  box-shadow: 0 2px 8px rgba(0,0,0,.2);
   opacity: 0; transform: translateY(8px); pointer-events: none; cursor: pointer;
   transition: opacity .9s ease-in .2s, transform .25s;
 }

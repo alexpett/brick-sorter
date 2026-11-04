@@ -573,3 +573,22 @@ dialog .colorbtn { width: 100%; }
 .paldots .swatch { width: 13px; height: 13px; }
 .paldots small { color: var(--muted); }
 .palrow { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+
+/* bin page: edit/trash icons, open/full toggle, inventory heading */
+.binpanel { position: relative; }
+.binpanel .setname { padding-right: 44px; }
+.iconbtn { display: inline-grid; place-items: center; width: 40px; height: 40px; padding: 0; border-radius: 999px; border: 1px solid var(--line, #e6e0d9); background: transparent; color: inherit; cursor: pointer; }
+.editbtn { position: absolute; top: 10px; right: 10px; }
+.binfoot { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 14px; }
+.trash { color: var(--danger, #b3261e); border-color: transparent; width: 36px; height: 36px; }
+.openfull { display: inline-flex; border: 1px solid var(--line, #cfc8c0); border-radius: 999px; overflow: hidden; }
+.openfull button { padding: 7px 18px; border: 0; background: transparent; color: inherit; font: inherit; font-weight: 600; cursor: pointer; }
+.openfull button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
+.panelhead { margin: 0 0 12px; font-size: 1.1rem; }
+#filter { margin-bottom: 12px; }
+.colorfilter { margin: 0 0 12px; }
+.editrows { display: grid; gap: 8px; margin: 12px 0; }
+.editrow { display: flex; align-items: center; justify-content: space-between; gap: 10px; text-align: left; margin-bottom: 8px; }
+.editrow small { color: var(--muted); font-size: .85rem; }
+
+.btn.editrow { display: flex; justify-content: space-between; align-items: center; text-align: left; width: 100%; }

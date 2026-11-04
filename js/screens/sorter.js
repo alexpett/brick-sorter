@@ -108,24 +108,33 @@ async function chooseColor(id) {
 }
 
 // Opens the colour picker dialog. Resolves with a colour id, or null if cancelled.
-export function pickColor(current = colorId, { allOnly = false } = {}) {
+// The Colour Wall: every LEGO colour, in groups, plus Recent and Your colours.
+//  allOnly   - only the grouped list (no Recent / Your colours tabs)
+//  only      - a Map of colour id -> pieces: show just those colours (the colours in a bin), with counts
+//  multi     - an array of colour ids already chosen: tapping toggles, Done returns the whole list
+//  clearLabel- adds a button that resolves 'clear' (e.g. "Show all colours")
+// Resolves a colour id, an array (multi), 'clear', or null if cancelled.
+export function pickColor(current = colorId, { allOnly = false, only = null, multi = null, clearLabel = '', title = 'Colour Wall' } = {}) {
+  allOnly = allOnly || !!only || !!multi;
   return new Promise((resolve) => {
     const d = $('#dlg');
     let tab = allOnly ? 'all' : recent.length ? 'recent' : 'yours';
     let filter = '';
     let open = null; // the one group that is expanded (none to start with)
     d.innerHTML = `<form method="dialog">
-      <h2>Colour</h2>
+      <h2>${esc(title)}</h2>
       <div class="segmented" id="cpTabs" role="tablist"></div>
       <input id="cfilter" type="search" placeholder="Filter colours" autocomplete="off" spellcheck="false" hidden>
       <div id="cgrid"></div>
-      <div class="row"><button class="btn" value="cancel" formnovalidate>Cancel</button></div>
+      <div class="row">${clearLabel ? `<button class="btn" value="clear" formnovalidate>${esc(clearLabel)}</button>` : ''}<span class="grow"></span><button class="btn" value="cancel" formnovalidate>Cancel</button>${multi ? '<button class="btn primary" value="done" formnovalidate>Done</button>' : ''}</div>
     </form>`;
-    const byRank = (a, b) => b.popularity - a.popularity || a.name.localeCompare(b.name);
+    const picked = new Set(multi || []);
+    const every = () => (only ? [...only.keys()].map(colorOf).filter(Boolean) : refdata.pickerColors());
+    const byRank = only ? (a, b) => (only.get(b.id) || 0) - (only.get(a.id) || 0) || a.name.localeCompare(b.name) : (a, b) => b.popularity - a.popularity || a.name.localeCompare(b.name);
     const yoursRank = (a, b) => (info.colorCounts.get(b.id) || 0) - (info.colorCounts.get(a.id) || 0) || a.name.localeCompare(b.name);
     const swatches = (colors) => `<div class="cgrid">${colors.map((c) => `
-      <button type="button" class="cswatch" data-color="${c.id}" aria-pressed="${c.id === current}" title="${esc(c.name)}">
-        ${swatchHtml(c, ' lg')}<span class="cn">${esc(c.name)}</span>
+      <button type="button" class="cswatch" data-color="${c.id}" aria-pressed="${multi ? picked.has(c.id) : c.id === current}" title="${esc(c.name)}">
+        ${swatchHtml(c, ' lg')}<span class="cn">${esc(c.name)}${only ? ` · ${fmt(only.get(c.id) || 0)}` : ''}</span>
       </button>`).join('')}</div>`;
     const draw = () => {
       const yours = info.yourColorIds.map(colorOf).filter(Boolean).sort(yoursRank);
@@ -139,13 +148,13 @@ export function pickColor(current = colorId, { allOnly = false } = {}) {
       let colors;
       if (tab === 'recent') colors = recent.map(colorOf).filter(Boolean);
       else if (tab === 'yours') colors = yours.filter(match);
-      else if (needle) colors = refdata.pickerColors().filter(match).sort(byRank);
+      else if (needle || (only && every().length <= 12)) colors = every().filter(match).sort(byRank); // a short list needs no groups
       if (colors) {
         box.innerHTML = colors.length ? swatches(colors) : `<p class="hint">${tab === 'recent' ? 'Colours you pick will appear here.' : 'No colours match.'}</p>`;
         return;
       }
       // All, no filter: collapsible groups, each ranked by how widely the colour is used.
-      const all = refdata.pickerColors();
+      const all = every();
       box.innerHTML = `<div class="cgroups">${refdata.COLOR_GROUPS.map((g) => {
         const list = all.filter((c) => refdata.colorGroup(c) === g).sort(byRank);
         if (!list.length) return '';
@@ -175,6 +184,16 @@ export function pickColor(current = colorId, { allOnly = false } = {}) {
         return;
       }
       if (t.dataset.tab) { tab = t.dataset.tab; filter = ''; const f = d.querySelector('#cfilter'); f.value = ''; draw(); return; }
+      if (multi) { // toggle, keeping the list where it is
+        const id = Number(t.dataset.color);
+        if (picked.has(id)) picked.delete(id); else picked.add(id);
+        const box = d.querySelector('.cgroups');
+        const top = box ? box.scrollTop : 0;
+        draw();
+        const nb = d.querySelector('.cgroups');
+        if (nb) nb.scrollTop = top;
+        return;
+      }
       d.close(t.dataset.color);
     };
     d.oninput = (e) => { if (e.target.id === 'cfilter') { filter = e.target.value; draw(); } };
@@ -182,7 +201,9 @@ export function pickColor(current = colorId, { allOnly = false } = {}) {
     d.onclose = () => {
       d.onclick = null; d.oninput = null; d.onkeydown = null;
       const v = d.returnValue;
-      resolve(v && v !== 'cancel' ? Number(v) : null);
+      if (v === 'done') resolve([...picked]);
+      else if (v === 'clear') resolve('clear');
+      else resolve(v && v !== 'cancel' ? Number(v) : null);
     };
     d.returnValue = '';
     draw();
@@ -210,7 +231,7 @@ export function createSorter(el, { onSaved, onChangePart } = {}) {
     if (q === null || colorId === null || !st.part) return null;
     if (st.part.unrec) return { dest: [{ binId: 'unrecognised', qty: q }], needsRule: false, allocations: [] };
     const { allocations, storageQty } = bins.allocate(info.ctx, st.part.part_num, colorId, q);
-    const storageBin = storageQty > 0 ? bins.resolveStorage(info.ctx, st.part) : null;
+    const storageBin = storageQty > 0 ? bins.resolveStorage(info.ctx, st.part, colorId) : null;
     const dest = allocations.map((a) => ({ binId: a.bin.id, qty: a.qty }));
     if (storageQty > 0 && storageBin) dest.push({ binId: storageBin, qty: storageQty });
     return { dest, needsRule: storageQty > 0 && !storageBin, allocations, leftover: storageQty };
@@ -418,7 +439,7 @@ export function createSorter(el, { onSaved, onChangePart } = {}) {
         const e = (info.neededBy.get(part.part_num) || []).find((x) => x.bin.id === b.id && x.colorId === colorId);
         if (!e || e.rem < it.qty) { toast(`Bin ${b.number} doesn’t need that many.`); return; }
       }
-      const suggestedStore = part.unrec ? null : bins.resolveStorage(info.ctx, part);
+      const suggestedStore = part.unrec ? null : bins.resolveStorage(info.ctx, part, colorId);
       await bins.saveToBins({ part, color: colorOf(colorId), flags: st.flags, note: st.note.trim(), items });
       const where = items.map((it) => {
         const b = info.ctx.bins.find((x) => x.id === it.binId);
@@ -429,7 +450,7 @@ export function createSorter(el, { onSaved, onChangePart } = {}) {
       const target = stores.length === 1 ? stores[0] : null;
       if (target && !part.unrec) {
         extra = await bins.learnStorage({
-          part, chosenId: target.id, suggestedId: suggestedStore, ctx: info.ctx,
+          part, chosenId: target.id, suggestedId: suggestedStore, ctx: info.ctx, colorId,
           catName: part.cat_id != null ? refdata.categoryName(part.cat_id) : '',
         });
       }

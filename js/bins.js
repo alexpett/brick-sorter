@@ -163,14 +163,56 @@ export function allocate(ctx, partNum, colorId, qty) {
   return { allocations, storageQty: left };
 }
 
-// Storage bin for a part: a rule for that exact part wins, then the rule for its category.
-// Returns null when nothing has been chosen yet, so the app can ask.
-export function resolveStorage(ctx, part) {
-  const valid = (id) => !!id && ctx.bins.some((b) => b.id === id && b.type === 'storage' && !b.locked && !b.full);
-  const byPart = ctx.overrides[part.part_num];
-  if (valid(byPart)) return byPart;
-  const byCat = part.cat_id != null ? ctx.catMap[String(part.cat_id)] : null;
-  return valid(byCat) ? byCat : null;
+// ---------- colour rules ----------
+// A storage bin may hold only certain colours (its `palette`, a list of colour ids). No palette = any colour.
+export const binPalette = (bin) => (Array.isArray(bin?.palette) ? bin.palette.filter((x) => Number.isInteger(x)) : []);
+export const acceptsColour = (bin, colorId) => {
+  const p = binPalette(bin);
+  return !p.length || colorId === null || colorId === undefined || p.includes(colorId);
+};
+
+export async function setBinPalette(binId, ids) {
+  const bin = await db.get('bins', binId);
+  if (!bin || bin.deleted || bin.type !== 'storage' || bin.locked) throw new Error('That bin cannot have a colour rule.');
+  const list = [...new Set((ids || []).filter((x) => Number.isInteger(x)))];
+  await db.put('bins', { ...bin, palette: list.length ? list : null, updated: nowIso() });
+}
+
+// How many pieces of each category are in each storage bin (what the bin already holds).
+function catHeld(ctx) {
+  if (!ctx._catHeld) {
+    const m = new Map();
+    for (const [binId, lines] of ctx.byBin) {
+      const c = new Map();
+      for (const l of lines) if (l.cat_id != null) c.set(l.cat_id, (c.get(l.cat_id) || 0) + l.qty);
+      m.set(binId, c);
+    }
+    ctx._catHeld = m;
+  }
+  return ctx._catHeld;
+}
+
+// Storage bin for a part (in a colour). A rule for that exact part wins, then bins whose colour rule
+// lists this colour and that already hold the category, then the category's usual bin, then any bin
+// whose colour rule lists this colour. A bin whose colour rule leaves the colour out is never chosen.
+// Returns null when nothing fits, so the app can ask.
+export function resolveStorage(ctx, part, colorId = null) {
+  const stores = ctx.bins.filter((b) => b.type === 'storage' && !b.deleted && !b.locked && !b.full);
+  const ok = (b) => acceptsColour(b, colorId);
+  const byId = (id) => stores.find((b) => b.id === id);
+  const ob = byId(ctx.overrides[part.part_num]);
+  if (ob && ok(ob)) return ob.id;
+  const cat = part.cat_id ?? null;
+  const catBinId = cat !== null ? ctx.catMap[String(cat)] : null;
+  const held = (b) => (cat !== null ? (catHeld(ctx).get(b.id)?.get(cat) || 0) : 0);
+  const fits = colorId !== null && colorId !== undefined ? stores.filter((b) => binPalette(b).includes(colorId)) : [];
+  const related = fits.filter((b) => b.id === catBinId || held(b) > 0)
+    .sort((x, y) => (y.id === catBinId) - (x.id === catBinId) || held(y) - held(x) || binPalette(x).length - binPalette(y).length);
+  if (related.length) return related[0].id;
+  const cb = byId(catBinId);
+  if (cb && ok(cb)) return cb.id;
+  const pure = fits.sort((x, y) => binPalette(x).length - binPalette(y).length);
+  return pure.length ? pure[0].id : null;
 }
 
 // The bin a rule points at even if it is full (so the app can say "X is full").
@@ -199,13 +241,15 @@ const RECENT_NEEDED = 3; // how many of them must agree before the category rule
 //    recent pieces in the category went there too, the category rule moves as well
 //  - you chose the category's usual bin again: the part's own exception is dropped
 // Returns a short sentence for the "Saved" toast, or ''.
-export async function learnStorage({ part, chosenId, suggestedId, ctx, catName }) {
+export async function learnStorage({ part, chosenId, suggestedId, ctx, catName, colorId = null }) {
   const chosen = ctx.bins.find((b) => b.id === chosenId);
   if (!part?.part_num || !chosen || chosen.type !== 'storage' || chosen.locked) return '';
   const label = chosen.label;
   const log = ((await db.getSetting('storageLog')) || []).slice(-299);
-  log.push({ t: nowIso(), cat: part.cat_id ?? null, part: part.part_num, bin: chosenId, sug: suggestedId || null });
+  log.push({ t: nowIso(), cat: part.cat_id ?? null, part: part.part_num, col: colorId, bin: chosenId, sug: suggestedId || null });
   await db.setSetting('storageLog', log);
+  // A bin with a colour rule that lists this colour is simply the right place for it: nothing to learn.
+  if (colorId !== null && binPalette(chosen).includes(colorId)) return '';
   const catKey = part.cat_id != null ? String(part.cat_id) : null;
   const named = catName ? `“${catName}”` : 'this part';
 

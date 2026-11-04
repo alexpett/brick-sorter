@@ -564,3 +564,12 @@ dialog .colorbtn { width: 100%; }
 .sugtext strong { font-size: 1rem; line-height: 1.2; }
 .sugtext small { font-size: 0.82rem; opacity: 0.92; }
 .sugarrow { font-size: 1.8rem; line-height: 1; opacity: .8; }
+
+/* colour filter button, colour rules */
+.colorfilter { display: flex; gap: 8px; align-items: center; margin: 0 0 8px; }
+.colorfilter[hidden] { display: none; }
+.colorfilter .colorbtn { flex: 1; min-width: 0; }
+.paldots { display: inline-flex; gap: 3px; align-items: center; vertical-align: middle; }
+.paldots .swatch { width: 13px; height: 13px; }
+.paldots small { color: var(--muted); }
+.palrow { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }

@@ -59,7 +59,7 @@ export async function renderBins() {
             <span class="binchip store big"${bins.chipStyle(b)}>${esc(b.label.slice(0, 2).toUpperCase())}</span>
             <div class="cardtext">
               <div class="cardname">${esc(b.label)}</div>
-              <div class="cardmeta">${fmt(count(b.id))} ${count(b.id) === 1 ? 'piece' : 'pieces'}${b.desc ? ` · ${esc(b.desc)}` : ''}${b.full ? ' · <span class="tag warn">Full</span>' : ''}${wantedLines(b.id) ? ` · <span class="tag ok">${wantedLines(b.id)} ${wantedLines(b.id) === 1 ? 'line' : 'lines'} wanted by active sets</span>` : ''}</div>
+              <div class="cardmeta">${fmt(count(b.id))} ${count(b.id) === 1 ? 'piece' : 'pieces'}${b.desc ? ` · ${esc(b.desc)}` : ''}${paletteDots(b) ? ` ${paletteDots(b)}` : ''}${b.full ? ' · <span class="tag warn">Full</span>' : ''}${wantedLines(b.id) ? ` · <span class="tag ok">${wantedLines(b.id)} ${wantedLines(b.id) === 1 ? 'line' : 'lines'} wanted by active sets</span>` : ''}</div>
             </div>
             <span class="chev" aria-hidden="true">›</span>
           </a>
@@ -113,10 +113,10 @@ async function exportSorting(ctx) {
   const out = {
     exported: new Date().toISOString(),
     note: 'Pieces held in storage bins, the storage rules in force, and the last storage choices made on this device.',
-    storage_bins: storage.map((b) => ({ label: b.label, description: b.desc || '', full: !!b.full, pieces: partCount(ctx.byBin.get(b.id) || []) })),
+    storage_bins: storage.map((b) => ({ label: b.label, description: b.desc || '', full: !!b.full, pieces: partCount(ctx.byBin.get(b.id) || []), colour_rule: bins.binPalette(b).map((i) => colour(i)?.name).filter(Boolean) })),
     category_rules: Object.entries(ctx.catMap || {}).map(([cat, bin]) => ({ category: refdata.categoryName(Number(cat)), bin: label(bin) })),
     part_exceptions: Object.entries(ctx.overrides || {}).map(([part, bin]) => ({ part_num: part, bin: label(bin) })),
-    recent_choices: log.map((e) => ({ when: e.t, category: refdata.categoryName(e.cat), part_num: e.part, chosen: label(e.bin), suggested: e.sug ? label(e.sug) : null })),
+    recent_choices: log.map((e) => ({ when: e.t, category: refdata.categoryName(e.cat), part_num: e.part, colour: e.col != null ? colour(e.col)?.name : undefined, chosen: label(e.bin), suggested: e.sug ? label(e.sug) : null })),
     lines,
   };
   const blob = new Blob([JSON.stringify(out, null, 1)], { type: 'application/json' });
@@ -180,11 +180,12 @@ async function drawRules() {
 
 let binMode = 'missing'; // 'missing' | 'found' for active bins
 let pickOnly = false; // missing list: only pieces that are sitting in storage
-let colorFilter = null; // colour id chosen in the bin's colour chips
+let colorFilter = null; // colour id chosen with the Colour Wall (bin view)
+let offOnly = false; // storage bin: only lines outside the bin's colour rule
 let neededOnly = false; // storage bin: only lines an active set still wants
 
 export async function renderBin(id, keepMode = false) {
-  if (!keepMode) { binMode = 'missing'; pickOnly = false; colorFilter = null; neededOnly = false; }
+  if (!keepMode) { binMode = 'missing'; pickOnly = false; colorFilter = null; neededOnly = false; offOnly = false; }
   const ctx = await bins.loadContext();
   const isAll = id === 'all';
   const bin = isAll ? null : ctx.bins.find((b) => b.id === id);
@@ -286,10 +287,12 @@ export async function renderBin(id, keepMode = false) {
       <section class="panel">
         <h2 class="setname">${bins.colorSquare(bin)}${esc(bin.label)}</h2>
         <p class="cardmeta">${fmt(partCount(lines))} ${partCount(lines) === 1 ? 'piece' : 'pieces'}${bin.desc ? ` · ${esc(bin.desc)}` : ''}</p>
+        ${paletteRow(bin)}
         ${bin.full ? '<p class="hint">This bin is full. Nothing new is suggested or accepted here until you reopen it.</p>' : ''}
         <div class="actions">
           <button class="btn" id="binColor">Bin colour</button>
-          ${bin.locked ? '' : `<button class="btn${bin.full ? ' primary' : ''}" id="fullToggle" aria-pressed="${!!bin.full}">${bin.full ? 'Reopen bin' : 'Mark as full'}</button>
+          ${bin.locked ? '' : `<button class="btn" id="colorRule">Colour rule</button>
+          <button class="btn${bin.full ? ' primary' : ''}" id="fullToggle" aria-pressed="${!!bin.full}">${bin.full ? 'Reopen bin' : 'Mark as full'}</button>
           <button class="btn" id="rename">Rename</button>
           <button class="btn danger" id="delBin">Delete bin</button>`}
         </div>
@@ -306,9 +309,10 @@ export async function renderBin(id, keepMode = false) {
  </div>
       ${binMode === 'missing' && pickCount ? `<button type="button" class="chip pickchip" id="pickToggle" aria-pressed="${pickOnly}">In storage: ${fmt(pickCount)} ${pickCount === 1 ? 'part' : 'parts'} to pick</button>` : ''}` : ''}
       ${!isActive && wantedCount ? `<button type="button" class="chip pickchip" id="neededToggle" aria-pressed="${neededOnly}">Wanted by active sets: ${fmt(wantedCount)} ${wantedCount === 1 ? 'line' : 'lines'}</button>` : ''}
+      ${(() => { const n = (!isAll && bin.type === 'storage' && bins.binPalette(bin).length) ? lines.filter((l) => !bins.acceptsColour(bin, l.color_id)).length : 0; return n ? `<button type="button" class="chip pickchip" id="offToggle" aria-pressed="${offOnly}">Outside this bin’s colour rule: ${fmt(n)} ${n === 1 ? 'line' : 'lines'}</button>` : ''; })()}
       <label for="filter" class="sr">Filter pieces</label>
       <input id="filter" type="search" placeholder="Filter by name, part number or colour" autocomplete="off">
-      <div class="flagrow colorchips" id="colorChips" role="group" aria-label="Filter by colour"></div>
+      <div class="colorfilter" id="colorChips"></div>
       <p class="hint" id="count"></p>
       <div id="bulkRow" class="bulkrow" hidden></div>
       <div id="lineList"></div>
@@ -318,7 +322,9 @@ export async function renderBin(id, keepMode = false) {
   const match = (l, q) => `${l.name} ${l.part_num} ${l.color_name} ${l.note || ''}`.toLowerCase().includes(q);
   const byColor = (l) => colorFilter === null || l.color_id === colorFilter;
   const showMissing = isActive && binMode === 'missing';
-  const shownLines = neededOnly && !isActive ? lines.filter((l) => wantedFor(l).length && ctx.bins.find((b) => b.id === l.bin_id)?.type === 'storage') : lines;
+  const offLines = !isAll && bin.type === 'storage' && bins.binPalette(bin).length ? lines.filter((l) => !bins.acceptsColour(bin, l.color_id)) : [];
+  let shownLines = neededOnly && !isActive ? lines.filter((l) => wantedFor(l).length && ctx.bins.find((b) => b.id === l.bin_id)?.type === 'storage') : lines;
+  if (offOnly && offLines.length) shownLines = offLines;
   const basePool = showMissing ? (pickOnly ? missing.filter((l) => l.avail > 0) : missing) : shownLines;
   // Colour chips: the colours in this list, most pieces first.
   const chipMap = new Map();
@@ -330,9 +336,11 @@ export async function renderBin(id, keepMode = false) {
   if (colorFilter !== null && !chipMap.has(colorFilter)) colorFilter = null;
   const drawChips = () => {
     const el = $('#colorChips');
-    const list = [...chipMap.values()].sort((a, b) => b.n - a.n || String(a.name).localeCompare(String(b.name)));
-    el.hidden = list.length < 2;
-    el.innerHTML = list.map((c) => `<button type="button" class="chip" data-cfilter="${c.id}" aria-pressed="${c.id === colorFilter}"><span class="swatch${c.trans ? ' trans' : ''}" style="--c:#${esc(safe(c.rgb))}"></span> ${esc(c.name)} · ${fmt(c.n)}</button>`).join('');
+    const cur = colorFilter === null ? null : chipMap.get(colorFilter);
+    el.hidden = chipMap.size < 2 && colorFilter === null;
+    el.innerHTML = `<button type="button" class="colorbtn${cur ? '' : ' empty'}" id="cfBtn" aria-label="Filter by colour">
+        ${cur ? `<span class="swatch lg${cur.trans ? ' trans' : ''}" style="--c:#${esc(safe(cur.rgb))}"></span><span>${esc(cur.name)} · ${fmt(cur.n)}</span>` : `<span>Filter by colour · ${fmt(chipMap.size)} in this bin</span>`}
+      </button>${cur ? '<button type="button" class="btn small" id="cfClear">Clear</button>' : ''}`;
   };
   const safe = (rgb) => (/^[0-9a-f]{6}$/i.test(rgb || '') ? rgb : '999999');
   let bulkShown = [];
@@ -409,11 +417,14 @@ export async function renderBin(id, keepMode = false) {
   };
   drawChips();
   draw('');
-  $('#colorChips').addEventListener('click', (e) => {
-    const c = e.target.closest('[data-cfilter]');
-    if (!c) return;
-    const idc = Number(c.dataset.cfilter);
-    colorFilter = colorFilter === idc ? null : idc;
+  $('#colorChips').addEventListener('click', async (e) => {
+    if (e.target.closest('#cfClear')) colorFilter = null;
+    else if (e.target.closest('#cfBtn')) {
+      const only = new Map([...chipMap].map(([cid, c]) => [cid, c.n]));
+      const r = await pickColor(colorFilter, { only, clearLabel: 'Show all colours', title: 'Colour Wall · this bin' });
+      if (r === null) return;
+      colorFilter = r === 'clear' ? null : r;
+    } else return;
     drawChips();
     draw($('#filter').value);
   });
@@ -428,6 +439,7 @@ export async function renderBin(id, keepMode = false) {
     binMode = m.dataset.mode;
     renderBin(id, true);
   });
+  $('#offToggle')?.addEventListener('click', () => { offOnly = !offOnly; renderBin(id, true); });
   $('#neededToggle')?.addEventListener('click', () => { neededOnly = !neededOnly; renderBin(id, true); });
   $('#pickToggle')?.addEventListener('click', () => { pickOnly = !pickOnly; renderBin(id, true); });
   listEl.addEventListener('click', async (e) => {
@@ -490,6 +502,9 @@ export async function renderBin(id, keepMode = false) {
       if (m) sel = sel.filter((_, i) => i !== Number(m[1]));
     }
     await renderBin(id, true);
+  });
+  $('#colorRule')?.addEventListener('click', async () => {
+    if (await colourRuleDialog(bin, ctx, lines)) await renderBin(id, true);
   });
   $('#fullToggle')?.addEventListener('click', async () => {
     await bins.setBinFull(bin.id, !bin.full);
@@ -617,6 +632,58 @@ async function takeFromStorage(row, bin) {
   return true;
 }
 
+// Small swatches for a storage bin's colour rule ('' if it takes any colour).
+function paletteDots(bin, max = 8) {
+  const ids = bins.binPalette(bin);
+  const cs = ids.map((i) => refdata.ref.colorById.get(i)).filter(Boolean);
+  if (!cs.length) return '';
+  return `<span class="paldots" aria-hidden="true">${cs.slice(0, max).map((c) => `<span class="swatch${c.is_trans ? ' trans' : ''}" style="--c:#${esc(safeRgb(c.rgb))}"></span>`).join('')}${cs.length > max ? `<small>+${cs.length - max}</small>` : ''}</span>`;
+}
+
+function paletteRow(bin) {
+  const ids = bins.binPalette(bin);
+  if (!ids.length) return '<p class="hint">Takes any colour. Use Colour rule to limit this bin to certain colours.</p>';
+  const names = ids.map((i) => refdata.ref.colorById.get(i)?.name).filter(Boolean);
+  return `<p class="hint palrow">${paletteDots(bin, 12)} Only: ${esc(names.join(', '))}</p>`;
+}
+
+// Edit which colours a storage bin holds. Resolves true if it was changed.
+async function colourRuleDialog(bin, ctx, lines) {
+  let sel = bins.binPalette(bin);
+  const colour = (i) => refdata.ref.colorById.get(i);
+  for (;;) {
+    const value = await openDialog(`
+      <h2>Colour rule · ${esc(bin.label)}</h2>
+      <p class="hint">Choose the colours that belong in this bin. New pieces in those colours are suggested here, and colours you leave out are suggested elsewhere. Leave it empty and the bin takes any colour.</p>
+      <div class="flagrow">${sel.map((i) => { const c = colour(i); return c ? `<button class="chip" value="rm${i}" formnovalidate aria-label="Remove ${esc(c.name)}"><span class="swatch${c.is_trans ? ' trans' : ''}" style="--c:#${esc(safeRgb(c.rgb))}"></span> ${esc(c.name)} ✕</button>` : ''; }).join('') || '<span class="hint">Any colour.</span>'}</div>
+      <button class="btn block" value="add" formnovalidate>+ Choose colours</button>
+      ${lines.length ? '<button class="btn block" value="fromBin" formnovalidate>Use the colours in this bin now</button>' : ''}
+      <div class="row spread">
+        <button class="btn" value="reset" formnovalidate>Any colour</button>
+        <span class="grow"></span>
+        <button class="btn" value="cancel" formnovalidate>Cancel</button>
+        <button class="btn primary" value="save">Save</button>
+      </div>`);
+    if (!value || value === 'cancel') return false;
+    if (value === 'save') { await bins.setBinPalette(bin.id, sel); toast(sel.length ? `${bin.label} now only takes ${sel.length} ${sel.length === 1 ? 'colour' : 'colours'}.` : `${bin.label} takes any colour.`); return true; }
+    if (value === 'reset') { sel = []; continue; }
+    if (value === 'fromBin') {
+      const n = new Map();
+      for (const l of lines) n.set(l.color_id, (n.get(l.color_id) || 0) + l.qty);
+      const total = [...n.values()].reduce((a, b) => a + b, 0) || 1;
+      sel = [...n].filter(([, q]) => q / total >= 0.03).map(([cid]) => cid); // ignore the odd stray piece
+      continue;
+    }
+    if (value === 'add') {
+      const r = await pickColor(null, { multi: sel, title: 'Colour Wall · colours for this bin' });
+      if (Array.isArray(r)) sel = r;
+      continue;
+    }
+    const m = /^rm(\d+)$/.exec(value);
+    if (m) sel = sel.filter((x) => x !== Number(m[1]));
+  }
+}
+
 // Moves every piece in the lines currently shown to another storage bin. Nothing moves until you confirm.
 async function bulkMoveDialog(lines, ctx, from) {
   const opts = ctx.bins
@@ -657,7 +724,7 @@ async function moveLineDialog(line, ctx, wm) {
     .sort((a, b) => (wantRem.has(b.id) ? 0 : 1) - (wantRem.has(a.id) ? 0 : 1) || (a.type === b.type ? (a.number ?? a.order ?? 0) - (b.number ?? b.order ?? 0) : a.type === 'active' ? -1 : 1));
   if (!opts.length) { toast('There is nowhere to move this to.'); return false; }
   const dflt = cur?.type === 'storage' ? opts.find((b) => wantRem.has(b.id)) || opts[0]
-    : opts.find((b) => b.type === 'storage' && b.id === bins.resolveStorage(ctx, { part_num: line.part_num, cat_id: line.cat_id })) || opts.find((b) => b.type === 'storage') || opts[0];
+    : opts.find((b) => b.type === 'storage' && b.id === bins.resolveStorage(ctx, { part_num: line.part_num, cat_id: line.cat_id }, line.color_id)) || opts.find((b) => b.type === 'storage') || opts[0];
   const startQty = wantRem.has(dflt.id) ? Math.min(line.qty, wantRem.get(dflt.id)) : line.qty;
   const { value, data } = await openDialog(`
     <h2>${esc(line.name)}</h2>

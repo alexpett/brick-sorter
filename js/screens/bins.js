@@ -455,16 +455,14 @@ export async function renderBin(id, keepMode = false) {
     };
     for (;;) {
       const shares = { 1: ['whole bin'], 2: ['half', 'half'], 3: ['half', 'quarter', 'quarter'], 4: ['quarter', 'quarter', 'quarter', 'quarter'] }[sel.length] || [];
-      const { value, data } = await openDialog(`
+      const { value } = await openDialog(`
         <h2>Bin colours</h2>
         <p class="hint">Choose up to four. Two split the bin in half, three give the first a half and the others a quarter each, four are quarters.</p>
         <div class="binpreview"><span class="binchip big"${bins.chipStyle({ colors: sel })}>${esc((bin.type === 'active' ? `Bin ${bin.number}` : bin.label.slice(0, 2).toUpperCase()))}</span></div>
         <ul class="bincolors">${sel.map((h, i) => `
           <li><span class="swatch lg" style="--c:${h}"></span><span class="grow">${esc(nameOf(h))} <small>${shares[i]}</small></span>
           <button class="btn small" value="rm${i}" formnovalidate aria-label="Remove ${esc(nameOf(h))}">Remove</button></li>`).join('') || '<li class="hint">No colour yet.</li>'}</ul>
-        ${sel.length < 4 ? `<button class="btn block" value="add" formnovalidate>+ Add a LEGO colour</button>
-        <label for="cc" class="optional">Or any other colour</label>
-        <div class="inline"><input id="cc" name="custom" type="color" value="#b3261e"><button class="btn" value="addcustom" formnovalidate>Add</button></div>` : ''}
+        ${sel.length < 4 ? '<button class="btn block" value="add" formnovalidate>+ Add a LEGO colour</button>' : ''}
         <div class="row spread">
           <button class="btn" value="reset" formnovalidate>Clear</button>
           <span class="grow"></span>
@@ -474,9 +472,8 @@ export async function renderBin(id, keepMode = false) {
       if (!value || value === 'cancel') return;
       if (value === 'save') { await bins.setBinColors(bin.id, sel); break; }
       if (value === 'reset') { sel = []; continue; }
-      if (value === 'addcustom') { sel = [...sel, String(data.get('custom')).toLowerCase()].slice(0, 4); continue; }
       if (value === 'add') {
-        const cid = await pickColor(null);
+        const cid = await pickColor(null, { allOnly: true });
         const c = cid === null || cid === undefined ? null : refdata.ref.colorById.get(cid);
         if (c) sel = [...sel, `#${c.rgb}`.toLowerCase()].slice(0, 4);
         continue;

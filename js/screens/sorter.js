@@ -84,10 +84,10 @@ async function chooseColor(id) {
 }
 
 // Opens the colour picker dialog. Resolves with a colour id, or null if cancelled.
-export function pickColor(current = colorId) {
+export function pickColor(current = colorId, { allOnly = false } = {}) {
   return new Promise((resolve) => {
     const d = $('#dlg');
-    let tab = recent.length ? 'recent' : 'yours';
+    let tab = allOnly ? 'all' : recent.length ? 'recent' : 'yours';
     let filter = '';
     let open = null; // the one group that is expanded (none to start with)
     d.innerHTML = `<form method="dialog">
@@ -105,7 +105,8 @@ export function pickColor(current = colorId) {
       </button>`).join('')}</div>`;
     const draw = () => {
       const yours = info.yourColorIds.map(colorOf).filter(Boolean).sort(yoursRank);
-      d.querySelector('#cpTabs').innerHTML = [['recent', `Recent (${recent.length})`], ['yours', `Your colours (${yours.length})`], ['all', 'All']]
+      d.querySelector('#cpTabs').hidden = allOnly;
+      if (!allOnly) d.querySelector('#cpTabs').innerHTML = [['recent', `Recent (${recent.length})`], ['yours', `Your colours (${yours.length})`], ['all', 'All']]
         .map(([id, label]) => `<button type="button" role="tab" data-tab="${id}" aria-selected="${tab === id}">${esc(label)}</button>`).join('');
       d.querySelector('#cfilter').hidden = tab === 'recent';
       const needle = filter.trim().toLowerCase();

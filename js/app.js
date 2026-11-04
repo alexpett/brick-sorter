@@ -1,13 +1,13 @@
 import * as db from './db.js';
 import * as rb from './rebrickable.js';
-
+import * as refdata from './data.js';
 import * as bins from './bins.js';
 import * as sync from './sync.js';
 import { $, view, esc, decode, fmt, safeRgb, setTitle, toast, openDialog, ask } from './ui.js';
 import { renderAdd } from './screens/add.js';
 import { renderScan, stopCamera } from './screens/scan.js';
 import { renderHome } from './screens/home.js';
-import { renderBins, renderBin, confirmAbandon } from './screens/bins.js';
+import { renderBins, renderBin, confirmAbandon, exportSorting, drawRules } from './screens/bins.js';
 
 
 // ---------- dialogs ----------
@@ -508,6 +508,13 @@ async function renderSettings() {
       <p class="hint">Sets, bins and sorted pieces are backed up. Parts lists are fetched again from Rebrickable on a new device. Your Rebrickable key is never sent to the sheet.</p>
     </section>
     <section class="panel">
+      <h2>Storage sorting</h2>
+      <p class="hint">Where pieces are stored when no active set needs them.</p>
+      <details class="rules" id="rules"><summary>Storage rules</summary><div id="rulesBody"></div></details>
+      <button type="button" class="btn block" id="exportSort">Export sorting data</button>
+      <p class="hint">A file of what is in each storage bin, the rules and your recent choices. Share it to get the rules tuned.</p>
+    </section>
+    <section class="panel">
       <h2>Your data</h2>
       <p>${fmt(sets.length)} sets and ${fmt(lineCount)} part lines are stored on this device${
         persistent ? '' : '. <strong>Warning:</strong> this browser is not keeping data between visits'}.</p>
@@ -556,6 +563,10 @@ async function renderSettings() {
   });
 
   await setupSyncPanel();
+  $('#exportSort').addEventListener('click', async () => {
+    try { toast(await exportSorting(await bins.loadContext())); } catch (err) { toast(err.message || 'Could not export.'); }
+  });
+  $('#rules').addEventListener('toggle', async () => { if ($('#rules').open) { await refdata.loadRef().catch(() => {}); await drawRules(); } });
 
   $('#wipe').addEventListener('click', async () => {
     const ok = await ask({

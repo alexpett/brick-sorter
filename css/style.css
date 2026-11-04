@@ -609,3 +609,4 @@ dialog .colorbtn { width: 100%; }
   transition: opacity .9s ease-in .2s, transform .25s;
 }
 #undoPill.show { opacity: 1; transform: none; pointer-events: auto; transition: opacity .15s, transform .25s; }
+.searchall { margin-bottom: 4px; }

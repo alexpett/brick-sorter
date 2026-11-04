@@ -47,6 +47,7 @@ export async function renderBins() {
     : '<p class="empty">No active bins yet. Open a set and choose “Start rebuilding this set”.</p>';
 
   view.innerHTML = `
+    <a class="btn block searchall" href="#/bin/all">Search all pieces</a>
     <section>
       <h2 class="section-title">Active bins</h2>
       ${activeHtml}
@@ -65,22 +66,15 @@ export async function renderBins() {
           </a>
         </li>`).join('')}</ul>
     </section>
-    <a class="btn block" href="#/bin/all">Search all pieces</a>
-    <button type="button" class="btn block" id="exportSort">Export sorting data</button>
-    <details class="panel rules" id="rules"><summary>Storage rules</summary><div id="rulesBody"></div></details>`;
+    `;
 
   $('#addBin').addEventListener('click', async () => { if (await editBinDialog(null, ctx, [])) await renderBins(); });
-  $('#exportSort').addEventListener('click', async () => {
-    try { toast(await exportSorting(ctx)); } catch (err) { toast(err.message || 'Could not export.'); }
-  });
-  $('#rules').addEventListener('toggle', () => { if ($('#rules').open) drawRules(); });
-  if (location.hash === '#/bins' && sessionStorageOpen()) { $('#rules').open = true; drawRules(); }
 }
 
 const $ = (sel) => view.querySelector(sel);
 
 // A file of what is in each storage bin, the current rules and recent choices, to share for tuning the rules.
-async function exportSorting(ctx) {
+export async function exportSorting(ctx) {
   const label = (id) => ctx.bins.find((b) => b.id === id)?.label || id;
   const colour = (id) => refdata.ref.colorById.get(id);
   const storage = ctx.bins.filter((b) => b.type === 'storage' && !b.deleted);
@@ -109,9 +103,8 @@ async function exportSorting(ctx) {
   setTimeout(() => URL.revokeObjectURL(a.href), 5000);
   return `Exported ${pl(lines.length, 'line', 'lines')} from ${pl(storage.length, 'storage bin', 'storage bins')}.`;
 }
-function sessionStorageOpen() { return false; }
 
-async function drawRules() {
+export async function drawRules() {
   const ctx = await bins.loadContext();
   const storage = ctx.bins.filter((b) => b.type === 'storage' && !b.locked).sort((a, b) => (a.order || 0) - (b.order || 0));
   const cats = Object.entries(ctx.catMap);
@@ -138,7 +131,7 @@ async function drawRules() {
       <li><span>${esc(partName(pn))}</span>
       ${select('part', pn, bin)}<button class="linkbtn" data-rule-del="part" data-rule-key="${esc(pn)}">Remove</button></li>`),
   ];
-  const body = $('#rulesBody');
+  const body = view.querySelector('#rulesBody');
   body.innerHTML = rows.length
     ? `<p class="hint">Where pieces that no active set needs are stored. A rule for one part beats the rule for its category. The rules follow you: choose a different bin and that part goes there next time, and when most recent pieces of a category go to one bin, the category follows. A full bin is skipped.</p><ul class="rulelist">${rows.join('')}</ul>`
     : '<p class="hint">No rules yet. The first time a piece needs storage, the app asks which bin and remembers.</p>';

@@ -134,15 +134,18 @@ export async function loadContext() {
   return { bins, sets, setsByNum, byBin, active, catMap: catMap || {}, overrides: overrides || {} };
 }
 
-// Decides where qty pieces of one part and colour go. The most complete set is filled first,
-// and equally complete sets are filled in bin-number order. A bin never takes more than its
-// set still needs; anything left over goes to storage.
+// Decides where qty pieces of one part and colour go. If one active bin can take them all, the
+// most complete such set gets them all (no split). Otherwise the most complete set is filled
+// first, equally complete sets in bin-number order. A bin never takes more than its set still
+// needs; anything left over goes to storage.
 export function allocate(ctx, partNum, colorId, qty) {
   const key = `${partNum}|${colorId}`;
-  const candidates = ctx.active
+  let candidates = ctx.active
     .map((a) => ({ a, remaining: (a.need.get(key) || 0) - (a.held.get(key) || 0) }))
     .filter((c) => c.remaining > 0)
     .sort((x, y) => y.a.frac - x.a.frac || x.a.bin.number - y.a.bin.number);
+  const whole = candidates.find((c) => c.remaining >= qty);
+  if (whole) candidates = [whole];
   let left = qty;
   const allocations = [];
   for (const c of candidates) {

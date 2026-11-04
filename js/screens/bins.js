@@ -268,7 +268,7 @@ export async function renderBin(id, keepMode = false) {
     const pct = a ? Math.round(a.frac * 100) : 0;
     head = `
       <section class="panel">
-        <h2 class="setname">${esc(a?.set.name || 'Set')}</h2>
+        <h2 class="setname">${bins.colorSquare(bin)}${esc(a?.set.name || 'Set')}</h2>
         <p class="cardmeta">${esc(bin.set_num)}${a ? ` · ${fmt(a.heldTotal)} of ${fmt(a.neededTotal)} pieces · ${pct}%` : ''}</p>
         <div class="bar solid" aria-hidden="true"><i style="--p:${pct}%"></i></div>
         <div class="actions"><button class="btn" id="binColor">Bin colour</button><button class="btn danger" id="abandon">Abandon this bin</button></div>
@@ -276,7 +276,7 @@ export async function renderBin(id, keepMode = false) {
   } else if (!isAll) {
     head = `
       <section class="panel">
-        <h2 class="setname">${esc(bin.label)}</h2>
+        <h2 class="setname">${bins.colorSquare(bin)}${esc(bin.label)}</h2>
         <p class="cardmeta">${fmt(partCount(lines))} ${partCount(lines) === 1 ? 'piece' : 'pieces'}${bin.desc ? ` · ${esc(bin.desc)}` : ''}</p>
         ${bin.full ? '<p class="hint">This bin is full. Nothing new is suggested or accepted here until you reopen it.</p>' : ''}
         <div class="actions">
@@ -448,21 +448,42 @@ export async function renderBin(id, keepMode = false) {
   });
 
   $('#binColor')?.addEventListener('click', async () => {
-    const cur = /^#[0-9a-f]{6}$/i.test(bin.color || '') ? bin.color : '';
-    const { value, data } = await openDialog(`
-      <h2>Bin colour</h2>
-      <div class="cgrid presets">${bins.BIN_COLORS.map((c) => `<button type="submit" class="cswatch" value="${c}" aria-pressed="${c === cur}" aria-label="${c}"><span class="swatch lg" style="--c:${c}"></span></button>`).join('')}</div>
-      <label for="cc">Or pick any colour</label>
-      <input id="cc" name="custom" type="color" value="${cur || '#b3261e'}">
-      <div class="row spread">
-        <button class="btn" value="reset" formnovalidate>Default</button>
-        <span class="grow"></span>
-        <button class="btn" value="cancel" formnovalidate>Cancel</button>
-        <button class="btn primary" value="custom">Use this colour</button>
-      </div>`, { data: true });
-    if (!value || value === 'cancel') return;
-    const hex = value === 'reset' ? null : value === 'custom' ? String(data.get('custom')) : value;
-    await bins.setBinColor(bin.id, hex);
+    let sel = bins.binColors(bin);
+    const nameOf = (hex) => {
+      const c = [...refdata.ref.colorById.values()].find((x) => `#${x.rgb}`.toLowerCase() === hex.toLowerCase());
+      return c ? c.name : 'Custom';
+    };
+    for (;;) {
+      const shares = { 1: ['whole bin'], 2: ['half', 'half'], 3: ['half', 'quarter', 'quarter'], 4: ['quarter', 'quarter', 'quarter', 'quarter'] }[sel.length] || [];
+      const { value, data } = await openDialog(`
+        <h2>Bin colours</h2>
+        <p class="hint">Choose up to four. Two split the bin in half, three give the first a half and the others a quarter each, four are quarters.</p>
+        <div class="binpreview"><span class="binchip big"${bins.chipStyle({ colors: sel })}>${esc((bin.type === 'active' ? `Bin ${bin.number}` : bin.label.slice(0, 2).toUpperCase()))}</span></div>
+        <ul class="bincolors">${sel.map((h, i) => `
+          <li><span class="swatch lg" style="--c:${h}"></span><span class="grow">${esc(nameOf(h))} <small>${shares[i]}</small></span>
+          <button class="btn small" value="rm${i}" formnovalidate aria-label="Remove ${esc(nameOf(h))}">Remove</button></li>`).join('') || '<li class="hint">No colour yet.</li>'}</ul>
+        ${sel.length < 4 ? `<button class="btn block" value="add" formnovalidate>+ Add a LEGO colour</button>
+        <label for="cc" class="optional">Or any other colour</label>
+        <div class="inline"><input id="cc" name="custom" type="color" value="#b3261e"><button class="btn" value="addcustom" formnovalidate>Add</button></div>` : ''}
+        <div class="row spread">
+          <button class="btn" value="reset" formnovalidate>Clear</button>
+          <span class="grow"></span>
+          <button class="btn" value="cancel" formnovalidate>Cancel</button>
+          <button class="btn primary" value="save">Save</button>
+        </div>`, { data: true });
+      if (!value || value === 'cancel') return;
+      if (value === 'save') { await bins.setBinColors(bin.id, sel); break; }
+      if (value === 'reset') { sel = []; continue; }
+      if (value === 'addcustom') { sel = [...sel, String(data.get('custom')).toLowerCase()].slice(0, 4); continue; }
+      if (value === 'add') {
+        const cid = await pickColor(null);
+        const c = cid === null || cid === undefined ? null : refdata.ref.colorById.get(cid);
+        if (c) sel = [...sel, `#${c.rgb}`.toLowerCase()].slice(0, 4);
+        continue;
+      }
+      const m = /^rm(\d+)$/.exec(value);
+      if (m) sel = sel.filter((_, i) => i !== Number(m[1]));
+    }
     await renderBin(id, true);
   });
   $('#fullToggle')?.addEventListener('click', async () => {

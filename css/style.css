@@ -537,3 +537,10 @@ dialog .colorbtn { width: 100%; }
 /* bulk move from a storage bin */
 .bulkrow { margin: 0 0 .75rem; }
 .bulkrow .btn { width: 100%; }
+
+/* bin colours */
+.binsquare { display: inline-block; width: 1em; height: 1em; border-radius: 4px; margin-right: .45em; vertical-align: -0.1em; border: 1px solid rgba(0,0,0,.25); }
+.binpreview { display: flex; justify-content: center; margin: 8px 0; }
+.bincolors { list-style: none; padding: 0; margin: 0 0 10px; display: grid; gap: 8px; }
+.bincolors li { display: flex; align-items: center; gap: 10px; }
+.bincolors small { color: var(--muted); }

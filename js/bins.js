@@ -401,16 +401,49 @@ export async function storageMatches(ctx, setNum) {
 
 export const BIN_COLORS = ['#b3261e', '#d9622b', '#e0a800', '#2e8b4f', '#1f9a9a', '#2a6fc4', '#6a4fc4', '#b0489c', '#7a5a3a', '#5b6b7a', '#222222', '#8a8f98'];
 
+const HEX = /^#[0-9a-f]{6}$/i;
+
+// Up to four colours for a bin. Older bins only have the single `color`.
+export function binColors(bin) {
+  const list = Array.isArray(bin?.colors) ? bin.colors.filter((h) => HEX.test(h || '')) : [];
+  if (list.length) return list.slice(0, 4);
+  return HEX.test(bin?.color || '') ? [bin.color] : [];
+}
+
+const lum = (hex) => { const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16)); return 0.299 * r + 0.587 * g + 0.114 * b; };
+
+// The background for a bin's chip: one colour solid; two split diagonally in half; three as a half and
+// two quarters; four as quarters. The first colour chosen gets the largest share.
+export function binBackground(colors) {
+  if (colors.length === 1) return colors[0];
+  const cuts = { 2: [50], 3: [50, 75], 4: [25, 50, 75] }[colors.length];
+  const stops = colors.map((c, i) => `${c} ${i === 0 ? 0 : cuts[i - 1]}% ${i === colors.length - 1 ? 100 : cuts[i]}%`);
+  return `linear-gradient(135deg, ${stops.join(', ')})`;
+}
+
 export function chipStyle(bin) {
-  const hex = bin?.color;
-  if (!/^#[0-9a-f]{6}$/i.test(hex || '')) return '';
-  const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
-  const light = (0.299 * r + 0.587 * g + 0.114 * b) > 160;
-  return ` style="background:${hex};color:${light ? '#1d1b1a' : '#ffffff'}"`;
+  const colors = binColors(bin);
+  if (!colors.length) return '';
+  const light = colors.reduce((n, c) => n + lum(c), 0) / colors.length > 160;
+  const shadow = colors.length > 1 ? `;text-shadow:0 0 3px ${light ? 'rgba(255,255,255,.9)' : 'rgba(0,0,0,.7)'}` : '';
+  return ` style="background:${binBackground(colors)};color:${light ? '#1d1b1a' : '#ffffff'}${shadow};box-shadow:inset 0 0 0 1px rgba(0,0,0,.22)"`;
+}
+
+// A small square showing the bin's colours, for page headings ('' if none chosen).
+export function colorSquare(bin) {
+  const colors = binColors(bin);
+  return colors.length ? `<span class="binsquare" aria-hidden="true" style="background:${binBackground(colors)}"></span>` : '';
+}
+
+export async function setBinColors(binId, hexes) {
+  const bin = await db.get('bins', binId);
+  if (!bin || bin.deleted) throw new Error('Bin not found.');
+  const list = (hexes || []).filter((h) => HEX.test(h)).slice(0, 4);
+  await db.put('bins', { ...bin, colors: list.length ? list : null, color: list[0] || null, updated: nowIso() });
 }
 
 export async function setBinColor(binId, hex) {
   const bin = await db.get('bins', binId);
   if (!bin || bin.deleted) throw new Error('Bin not found.');
-  await db.put('bins', { ...bin, color: hex || null, updated: nowIso() });
+  await db.put('bins', { ...bin, color: hex || null, colors: hex ? [hex] : null, updated: nowIso() });
 }

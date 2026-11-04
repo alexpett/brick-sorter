@@ -10,23 +10,47 @@ const MAX_RECENT = 6;
 const FLAGS = [['sticker', 'Sticker'], ['printed', 'Printed'], ['other', 'Other']];
 
 // Shared lookups, refreshed whenever bins or sets change.
-export const info = { ctx: null, yours: new Set(), imgByPart: new Map(), neededBy: new Map(), yourColorIds: [], colorCounts: new Map() };
+export const info = { setTheme: new Map(), ctx: null, yours: new Set(), imgByPart: new Map(), neededBy: new Map(), yourColorIds: [], colorCounts: new Map() };
 
 let colorId = null;
 let recent = [];
 
 const colorOf = (id) => refdata.ref.colorById.get(id);
 
+// The colour that stands for a set: the one with most pieces, unless that is black, white or grey and a
+// real colour makes up a fair share of the set, in which case that colour.
+const NEUTRAL = (c) => c.id === 0 || c.id === 15 || /gr[ae]y|^black$|^white$/i.test(c.name || '');
+function dominantColour(list) {
+  const total = list.reduce((n, c) => n + c.n, 0) || 1;
+  const sorted = [...list].sort((a, b) => b.n - a.n);
+  let pick = sorted[0];
+  if (pick && NEUTRAL(pick)) {
+    const chroma = sorted.find((c) => !NEUTRAL(c) && !/^trans/i.test(c.name || ''));
+    if (chroma && chroma.n / total >= 0.12) pick = chroma;
+  }
+  const hex = pick && /^[0-9a-f]{6}$/i.test(pick.rgb || '') ? `#${pick.rgb}` : '#5b6b7a';
+  const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
+  return { bg: hex, ink: 0.299 * r + 0.587 * g + 0.114 * b > 150 ? '#1d1b1a' : '#ffffff' };
+}
+
 export async function refreshInfo() {
   info.ctx = await bins.loadContext();
   info.yours = new Set();
   info.imgByPart = new Map();
   const colors = new Map();
+  const perSet = new Map(); // set -> colour -> { n, rgb, name }
   for (const l of await db.all('setParts')) {
     info.yours.add(l.part_num);
-    colors.set(l.color_id, (colors.get(l.color_id) || 0) + (Number(l.quantity) || 0));
+    const n = Number(l.qty) || 0;
+    colors.set(l.color_id, (colors.get(l.color_id) || 0) + n);
     if (l.img && !info.imgByPart.has(l.part_num)) info.imgByPart.set(l.part_num, l.img);
+    if (!perSet.has(l.set_num)) perSet.set(l.set_num, new Map());
+    const m = perSet.get(l.set_num);
+    const c = m.get(l.color_id) || { n: 0, rgb: l.rgb, name: l.color_name, id: l.color_id };
+    c.n += n;
+    m.set(l.color_id, c);
   }
+  info.setTheme = new Map([...perSet].map(([setNum, m]) => [setNum, dominantColour([...m.values()])]));
   info.colorCounts = colors;
   info.yourColorIds = [...colors.keys()].sort((a, b) => colors.get(b) - colors.get(a));
   info.neededBy = new Map();
@@ -254,6 +278,30 @@ export function createSorter(el, { onSaved, onChangePart } = {}) {
     renderDest();
   }
 
+  // A full-width button for the predicted destination: the set's picture on the colour that dominates the set.
+  function sugButton() {
+    const sug = suggest();
+    if (!sug || sug.needsRule || !sug.dest.length || st.part.unrec) return '';
+    const ctx = info.ctx;
+    const dests = sug.dest.map((d) => ({ ...d, bin: ctx.bins.find((x) => x.id === d.binId) })).filter((d) => d.bin);
+    if (!dests.length) return '';
+    const first = dests[0].bin;
+    const lbl = (b) => (b.type === 'active' ? `Bin ${b.number}` : b.label);
+    const isActive = first.type === 'active';
+    const set = isActive ? ctx.setsByNum.get(first.set_num) : null;
+    const theme = (isActive && info.setTheme.get(first.set_num)) || { bg: bins.binColors(first)[0] || '#5b6b7a', ink: '#ffffff' };
+    const need = isActive ? (info.neededBy.get(st.part.part_num) || []).filter((x) => x.colorId === colorId && x.rem > 0).reduce((n, x) => (x.bin.id === first.id ? x.rem : n), 0) : 0;
+    const title = dests.length > 1 ? dests.map((d) => lbl(d.bin)).join(' + ') : `${lbl(first)}${set ? ` · ${set.name}` : ''}`;
+    const sub = dests.length > 1 ? dests.map((d) => `${fmt(d.qty)} in ${lbl(d.bin)}`).join(', ')
+      : isActive ? `Add ${fmt(dests[0].qty)} · set needs ${fmt(need)}` : `Storage · add ${fmt(dests[0].qty)}`;
+    const pic = set?.img ? `<img src="${esc(set.img)}" alt="">` : `<span>${esc(isActive ? String(first.number) : first.label.slice(0, 2).toUpperCase())}</span>`;
+    return `<button type="button" class="sugbtn" id="${dests.length > 1 ? 'useSplit' : 'useSug'}" style="background:${esc(theme.bg)};color:${theme.ink}">
+      <span class="sugpic">${pic}</span>
+      <span class="sugtext"><strong>${esc(title)}</strong><small>${esc(sub)}</small></span>
+      <span class="sugarrow" aria-hidden="true">›</span>
+    </button>`;
+  }
+
   function renderDest() {
     const box = el.querySelector('#dest');
     if (!box) return;
@@ -296,8 +344,7 @@ export function createSorter(el, { onSaved, onChangePart } = {}) {
       const lbl = (id) => { const b = ctx.bins.find((x) => x.id === id); return b.type === 'active' ? `Bin ${b.number}` : b.label; };
       note = `<p class="hint">${sug.dest.map((d) => `${fmt(d.qty)} → ${esc(lbl(d.binId))}`).join(', ')}. Tap a storage bin for the ${fmt(sug.leftover)} left over${st.part.cat_id != null ? ` (it will be remembered for “${esc(refdata.categoryName(st.part.cat_id))}”)` : ''}.</p>`;
     } else if (split) {
-      const lbl = (id) => { const b = ctx.bins.find((x) => x.id === id); return b.type === 'active' ? `Bin ${b.number}` : b.label; };
-      note = `<p class="hint">Suggested split: ${sug.dest.map((d) => `${fmt(d.qty)} → ${esc(lbl(d.binId))}`).join(', ')}. <button type="button" class="linkbtn" id="useSplit">Use this split</button></p>`;
+      note = '';
     } else if (sug?.needsRule && st.part && !st.part.unrec && bins.ruleBinId(ctx, st.part)) {
       const fb = ctx.bins.find((x) => x.id === bins.ruleBinId(ctx, st.part));
       note = `<p class="hint">${esc(fb?.label || 'The usual bin')} is full. Choose another storage bin and the app will use it from now on.</p>`;
@@ -323,7 +370,7 @@ export function createSorter(el, { onSaved, onChangePart } = {}) {
       };
       ordered = ordered.map((b, i) => ({ b, i, r: rank(b) })).sort((x, y) => x.r - y.r || x.i - y.i).map((x) => x.b);
     }
-    box.innerHTML = `${note}<div class="tiles">${ordered.map(tile).join('')}${addTile}</div>`;
+    box.innerHTML = `${sugButton()}${note}<div class="tiles">${ordered.map(tile).join('')}${addTile}</div>`;
   }
 
   // Create a storage bin without leaving the Log screen. The new bin is shown but not chosen.
@@ -411,7 +458,7 @@ export function createSorter(el, { onSaved, onChangePart } = {}) {
   }
 
   el.addEventListener('click', async (e) => {
-    const t = e.target.closest('[data-bin],[data-flag],[data-usecolor],#changePart,#colorBtn,#showSug,[data-addbin],#qtyMinus,#qtyPlus,#useSplit');
+    const t = e.target.closest('[data-bin],[data-flag],[data-usecolor],#changePart,#colorBtn,#showSug,[data-addbin],#qtyMinus,#qtyPlus,#useSplit,#useSug');
     if (!t) return;
     if (t.dataset.addbin) { await addBinFlow(); return; }
     if (t.dataset.bin) {
@@ -451,7 +498,7 @@ export function createSorter(el, { onSaved, onChangePart } = {}) {
         renderDest();
         break;
       }
-      case 'useSplit': { const s = suggest(); if (s) await commit(s.dest); break; }
+      case 'useSplit': case 'useSug': { const s = suggest(); if (s) await commit(s.dest); break; }
       default: break;
     }
   });

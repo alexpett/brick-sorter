@@ -278,24 +278,24 @@ export function createSorter(el, { onSaved, onChangePart } = {}) {
     renderDest();
   }
 
-  // A full-width button for the predicted destination: the set's picture on the colour that dominates the set.
+  // A full-width button for the first predicted bin: the set's picture on the colour that dominates the set.
+  // It does exactly what tapping that bin's tile does (an active bin takes only what its set needs).
   function sugButton() {
     const sug = suggest();
-    if (!sug || sug.needsRule || !sug.dest.length || st.part.unrec) return '';
+    if (!sug || !sug.dest.length || st.part.unrec) return '';
     const ctx = info.ctx;
-    const dests = sug.dest.map((d) => ({ ...d, bin: ctx.bins.find((x) => x.id === d.binId) })).filter((d) => d.bin);
-    if (!dests.length) return '';
-    const first = dests[0].bin;
-    const lbl = (b) => (b.type === 'active' ? `Bin ${b.number}` : b.label);
+    const first = ctx.bins.find((x) => x.id === sug.dest[0].binId);
+    if (!first) return '';
     const isActive = first.type === 'active';
     const set = isActive ? ctx.setsByNum.get(first.set_num) : null;
     const theme = (isActive && info.setTheme.get(first.set_num)) || { bg: bins.binColors(first)[0] || '#5b6b7a', ink: '#ffffff' };
-    const need = isActive ? (info.neededBy.get(st.part.part_num) || []).filter((x) => x.colorId === colorId && x.rem > 0).reduce((n, x) => (x.bin.id === first.id ? x.rem : n), 0) : 0;
-    const title = dests.length > 1 ? dests.map((d) => lbl(d.bin)).join(' + ') : `${lbl(first)}${set ? ` · ${set.name}` : ''}`;
-    const sub = dests.length > 1 ? dests.map((d) => `${fmt(d.qty)} in ${lbl(d.bin)}`).join(', ')
-      : isActive ? `Add ${fmt(dests[0].qty)} · set needs ${fmt(need)}` : `Storage · add ${fmt(dests[0].qty)}`;
+    const need = isActive ? (info.neededBy.get(st.part.part_num) || []).filter((x) => x.bin.id === first.id && x.colorId === colorId).reduce((n, x) => n + Math.max(0, x.rem), 0) : 0;
+    const q = qty() || 0;
+    const take = isActive ? Math.min(q, need) : q;
+    const title = isActive ? `Bin ${first.number}${set ? ` · ${set.name}` : ''}` : first.label;
+    const sub = isActive ? `Takes ${fmt(take)}${take < q ? ` of ${fmt(q)}` : ''} · set needs ${fmt(need)}` : `Storage · ${fmt(q)} here`;
     const pic = set?.img ? `<img src="${esc(set.img)}" alt="">` : `<span>${esc(isActive ? String(first.number) : first.label.slice(0, 2).toUpperCase())}</span>`;
-    return `<button type="button" class="sugbtn" id="${dests.length > 1 ? 'useSplit' : 'useSug'}" style="background:${esc(theme.bg)};color:${theme.ink}">
+    return `<button type="button" class="sugbtn" data-bin="${esc(first.id)}" style="background:${esc(theme.bg)};color:${theme.ink}">
       <span class="sugpic">${pic}</span>
       <span class="sugtext"><strong>${esc(title)}</strong><small>${esc(sub)}</small></span>
       <span class="sugarrow" aria-hidden="true">›</span>
@@ -344,7 +344,8 @@ export function createSorter(el, { onSaved, onChangePart } = {}) {
       const lbl = (id) => { const b = ctx.bins.find((x) => x.id === id); return b.type === 'active' ? `Bin ${b.number}` : b.label; };
       note = `<p class="hint">${sug.dest.map((d) => `${fmt(d.qty)} → ${esc(lbl(d.binId))}`).join(', ')}. Tap a storage bin for the ${fmt(sug.leftover)} left over${st.part.cat_id != null ? ` (it will be remembered for “${esc(refdata.categoryName(st.part.cat_id))}”)` : ''}.</p>`;
     } else if (split) {
-      note = '';
+      const lbl = (id) => { const b = ctx.bins.find((x) => x.id === id); return b.type === 'active' ? `Bin ${b.number}` : b.label; };
+      note = `<p class="hint">Suggested split: ${sug.dest.map((d) => `${fmt(d.qty)} → ${esc(lbl(d.binId))}`).join(', ')}. <button type="button" class="linkbtn" id="useSplit">Use this split</button></p>`;
     } else if (sug?.needsRule && st.part && !st.part.unrec && bins.ruleBinId(ctx, st.part)) {
       const fb = ctx.bins.find((x) => x.id === bins.ruleBinId(ctx, st.part));
       note = `<p class="hint">${esc(fb?.label || 'The usual bin')} is full. Choose another storage bin and the app will use it from now on.</p>`;
@@ -371,6 +372,9 @@ export function createSorter(el, { onSaved, onChangePart } = {}) {
       ordered = ordered.map((b, i) => ({ b, i, r: rank(b) })).sort((x, y) => x.r - y.r || x.i - y.i).map((x) => x.b);
     }
     box.innerHTML = `${sugButton()}${note}<div class="tiles">${ordered.map(tile).join('')}${addTile}</div>`;
+    const sb = box.querySelector('.sugbtn');
+    const first = box.querySelector('.tile');
+    if (sb && first) sb.style.height = `${first.offsetHeight}px`; // same height as the tiles below
   }
 
   // Create a storage bin without leaving the Log screen. The new bin is shown but not chosen.
@@ -458,7 +462,7 @@ export function createSorter(el, { onSaved, onChangePart } = {}) {
   }
 
   el.addEventListener('click', async (e) => {
-    const t = e.target.closest('[data-bin],[data-flag],[data-usecolor],#changePart,#colorBtn,#showSug,[data-addbin],#qtyMinus,#qtyPlus,#useSplit,#useSug');
+    const t = e.target.closest('[data-bin],[data-flag],[data-usecolor],#changePart,#colorBtn,#showSug,[data-addbin],#qtyMinus,#qtyPlus,#useSplit');
     if (!t) return;
     if (t.dataset.addbin) { await addBinFlow(); return; }
     if (t.dataset.bin) {
@@ -498,7 +502,7 @@ export function createSorter(el, { onSaved, onChangePart } = {}) {
         renderDest();
         break;
       }
-      case 'useSplit': case 'useSug': { const s = suggest(); if (s) await commit(s.dest); break; }
+      case 'useSplit': { const s = suggest(); if (s) await commit(s.dest); break; }
       default: break;
     }
   });

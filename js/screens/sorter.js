@@ -309,7 +309,7 @@ export function createSorter(el, { onSaved, onChangePart } = {}) {
     if (!first) return '';
     const isActive = first.type === 'active';
     const set = isActive ? ctx.setsByNum.get(first.set_num) : null;
-    const theme = (isActive && info.setTheme.get(first.set_num)) || { bg: bins.binColors(first)[0] || '#5b6b7a', ink: '#ffffff' };
+    const theme = (isActive && info.setTheme.get(first.set_num)) || { bg: '#ffffff', ink: '#1d1b1a' };
     const need = isActive ? (info.neededBy.get(st.part.part_num) || []).filter((x) => x.bin.id === first.id && x.colorId === colorId).reduce((n, x) => n + Math.max(0, x.rem), 0) : 0;
     const q = qty() || 0;
     const take = isActive ? Math.min(q, need) : q;
@@ -317,7 +317,7 @@ export function createSorter(el, { onSaved, onChangePart } = {}) {
     const sub = isActive ? `Takes ${fmt(take)}${take < q ? ` of ${fmt(q)}` : ''} · set needs ${fmt(need)}` : `Storage · ${fmt(q)} here`;
     const pic = set?.img ? `<img src="${esc(set.img)}" alt="">` : `<span>${esc(isActive ? String(first.number) : bins.binShort(first))}</span>`;
     return `<button type="button" class="sugbtn" data-bin="${esc(first.id)}" style="background:${esc(theme.bg)};color:${theme.ink}">
-      <span class="sugpic">${pic}</span>
+      <span class="sugpic"${isActive ? '' : (bins.chipStyle(first) || ' style="background:#5b6b7a;color:#fff"')}>${pic}</span>
       <span class="sugtext"><strong>${esc(title)}</strong><small>${esc(sub)}</small></span>
       <span class="sugarrow" aria-hidden="true">›</span>
     </button>`;

@@ -392,7 +392,8 @@ code { font-size: 0.85em; background: var(--bg); padding: 1px 4px; border-radius
 /* ---------- stage 5: camera ---------- */
 .scan { padding: 12px; }
 .viewer { position: relative; width: 100%; aspect-ratio: 4 / 3; max-height: 38vh; overflow: hidden; background: #111; border-radius: 12px; }
-.viewer video, .viewer img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.viewer video { width: 100%; height: 100%; object-fit: cover; display: block; }
+.viewer img { width: 100%; height: 100%; object-fit: contain; display: block; } /* shows the whole picture that was sent */
 .viewer [hidden] { display: none; }
 .viewer-msg { position: absolute; inset: 0; display: grid; place-items: center; margin: 0; padding: 16px; color: #fff; text-align: center; }
 .viewer-msg:empty { display: none; }

@@ -8,16 +8,18 @@ const ENDPOINT = 'https://api.brickognize.com/predict/parts/';
 export async function hasConsent() { return !!(await db.getSetting('recogConsent')); }
 export async function giveConsent() { await db.setSetting('recogConsent', true); }
 
-// Shrinks a photo so it uploads quickly. Returns { blob, base64 }.
-export async function prepare(source, max = 1024) {
+// Shrinks a photo so it uploads quickly. Returns { blob, canvas }.
+// `crop` ({x, y, w, h} in source pixels) keeps only that part of the picture.
+export async function prepare(source, max = 1024, crop = null) {
   const bmp = source instanceof Blob ? await createImageBitmap(source) : source;
-  const w = bmp.videoWidth || bmp.width;
-  const h = bmp.videoHeight || bmp.height;
-  const k = Math.min(1, max / Math.max(w, h));
+  const fullW = bmp.videoWidth || bmp.width;
+  const fullH = bmp.videoHeight || bmp.height;
+  const r = crop || { x: 0, y: 0, w: fullW, h: fullH };
+  const k = Math.min(1, max / Math.max(r.w, r.h));
   const c = document.createElement('canvas');
-  c.width = Math.max(1, Math.round(w * k));
-  c.height = Math.max(1, Math.round(h * k));
-  c.getContext('2d').drawImage(bmp, 0, 0, c.width, c.height);
+  c.width = Math.max(1, Math.round(r.w * k));
+  c.height = Math.max(1, Math.round(r.h * k));
+  c.getContext('2d').drawImage(bmp, r.x, r.y, r.w, r.h, 0, 0, c.width, c.height);
   const blob = await new Promise((res) => c.toBlob(res, 'image/jpeg', 0.85));
   if (!blob) throw new Error("Couldn't prepare the photo.");
   return { blob, canvas: c };
@@ -66,4 +68,18 @@ export async function identify(blob) {
   }
   void direct;
   throw new Error("Couldn't reach Brickognize from the browser. Setting up Google Sheet backup in Settings lets the app send the photo through your Google script instead.");
+}
+
+// The part of a playing <video> that is actually visible inside its box when it is shown with
+// object-fit: cover (the rest is cut off), in the video's own pixels.
+export function visibleCrop(video) {
+  const vw = video.videoWidth;
+  const vh = video.videoHeight;
+  const bw = video.clientWidth;
+  const bh = video.clientHeight;
+  if (!vw || !vh || !bw || !bh) return null;
+  const scale = Math.max(bw / vw, bh / vh);
+  const w = Math.min(vw, bw / scale);
+  const h = Math.min(vh, bh / scale);
+  return { x: (vw - w) / 2, y: (vh - h) / 2, w, h };
 }

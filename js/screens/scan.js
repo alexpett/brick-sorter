@@ -110,7 +110,7 @@ async function onClick(e) {
     if ($r('#shutter').classList.contains('again')) { showLive(); return; }
     const v = $r('#cam');
     if (!v || !v.videoWidth) { toast('The camera isn’t ready yet.'); return; }
-    await handle(v);
+    await handle(v, recog.visibleCrop(v)); // send only what the viewer shows
     return;
   }
   const pick = e.target.closest('[data-part]');
@@ -138,7 +138,7 @@ async function consent() {
   return true;
 }
 
-async function handle(source) {
+async function handle(source, crop = null) {
   if (!(await consent())) return;
   busy = true;
   const matches = $r('#matches');
@@ -146,7 +146,7 @@ async function handle(source) {
     sorter.clear();
     root.classList.remove('compact');
     matches.hidden = false;
-    const { blob, canvas } = await recog.prepare(source);
+    const { blob, canvas } = await recog.prepare(source, 1024, crop);
     const still = $r('#still');
     still.src = canvas.toDataURL('image/jpeg', 0.8);
     still.hidden = false;

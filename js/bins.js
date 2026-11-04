@@ -337,6 +337,18 @@ export async function moveLine(ctx, line, toBinId, qty) {
   return to;
 }
 
+// Moves whole lines, in bulk, between storage bins.
+export async function moveLines(ctx, lines, toBinId) {
+  const to = ctx.bins.find((b) => b.id === toBinId && !b.deleted);
+  if (!to || to.type !== 'storage') throw new Error('Choose a storage bin.');
+  if (to.full) throw new Error(`${to.label} is marked as full.`);
+  for (const line of lines) {
+    if (line.bin_id === to.id) continue;
+    await moveLine(ctx, line, to.id, line.qty);
+  }
+  return to;
+}
+
 export async function addStorageBin(label) {
   const clean = label.trim().slice(0, 30);
   if (!clean) throw new Error('Give the bin a name.');

@@ -533,3 +533,7 @@ dialog .colorbtn { width: 100%; }
 .tilebadge.full { background: var(--warn); color: var(--accent-ink); }
 .tile:disabled .tilebadge.full { opacity: 1; }
 .tag.warn { color: var(--warn); border-color: var(--warn); }
+
+/* bulk move from a storage bin */
+.bulkrow { margin: 0 0 .75rem; }
+.bulkrow .btn { width: 100%; }

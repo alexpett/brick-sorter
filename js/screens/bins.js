@@ -267,6 +267,7 @@ export async function renderBin(id, keepMode = false) {
       <input id="filter" type="search" placeholder="Filter by name, part number or colour" autocomplete="off">
       <div class="flagrow colorchips" id="colorChips" role="group" aria-label="Filter by colour"></div>
       <p class="hint" id="count"></p>
+      <div id="bulkRow" class="bulkrow" hidden></div>
       <div id="lineList"></div>
     </section>`;
 
@@ -291,6 +292,7 @@ export async function renderBin(id, keepMode = false) {
     el.innerHTML = list.map((c) => `<button type="button" class="chip" data-cfilter="${c.id}" aria-pressed="${c.id === colorFilter}"><span class="swatch${c.trans ? ' trans' : ''}" style="--c:#${esc(safe(c.rgb))}"></span> ${esc(c.name)} · ${fmt(c.n)}</button>`).join('');
   };
   const safe = (rgb) => (/^[0-9a-f]{6}$/i.test(rgb || '') ? rgb : '999999');
+  let bulkShown = [];
   const draw = (q) => {
     const needle = q.trim().toLowerCase();
     if (showMissing) {
@@ -327,6 +329,11 @@ export async function renderBin(id, keepMode = false) {
     const pool = shownLines.filter(byColor);
     const shown = needle ? pool.filter((l) => match(l, needle)) : pool;
     $('#count').textContent = `${pl(partCount(shown), 'piece', 'pieces')} in ${pl(shown.length, 'line', 'lines')}`;
+    bulkShown = shown;
+    const bulk = $('#bulkRow');
+    const canBulk = bin.type === 'storage' && !isAll && shown.length > 0;
+    bulk.hidden = !canBulk;
+    if (canBulk) bulk.innerHTML = `<button type="button" class="btn" id="bulkMove">Move ${colorFilter !== null || needle ? 'these' : 'all'} ${pl(partCount(shown), 'piece', 'pieces')} to another bin…</button>`;
     if (!shown.length) {
       listEl.innerHTML = `<p class="empty">${lines.length ? 'No pieces match.' : isAll ? 'Nothing has been sorted yet.' : 'Nothing found yet. Use the Missing tab or the Add tab.'}</p>`;
       return;
@@ -366,6 +373,10 @@ export async function renderBin(id, keepMode = false) {
     colorFilter = colorFilter === idc ? null : idc;
     drawChips();
     draw($('#filter').value);
+  });
+  $('#bulkRow').addEventListener('click', async (e) => {
+    if (!e.target.closest('#bulkMove')) return;
+    if (await bulkMoveDialog(bulkShown, ctx, bin)) await renderBin(id, true);
   });
   $('#filter').addEventListener('input', (e) => draw(e.target.value));
   view.querySelector('.segmented')?.addEventListener('click', (e) => {
@@ -431,7 +442,7 @@ export async function renderBin(id, keepMode = false) {
     const { value, data } = await openDialog(`
       <h2>Rename bin</h2>
       <label for="nb">Name</label>
-      <input id="nb" name="name" maxlength="30" required>
+      <input id="nb" name="name" maxlength="30" required value="${esc(bin.label)}">
       <div class="row">
         <button class="btn" value="cancel" formnovalidate>Cancel</button>
         <button class="btn primary" value="ok">Save</button>
@@ -543,6 +554,35 @@ async function takeFromStorage(row, bin) {
   });
   toast(`Moved ${fmt(qty)} × ${row.name} to Bin ${bin.number}`);
   return true;
+}
+
+// Moves every piece in the lines currently shown to another storage bin. Nothing moves until you confirm.
+async function bulkMoveDialog(lines, ctx, from) {
+  const opts = ctx.bins
+    .filter((b) => !b.deleted && b.type === 'storage' && b.id !== from.id && b.id !== 'unrecognised' && !b.full)
+    .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+  if (!opts.length) { toast('There is no other storage bin to move these to. Add one on the Bins screen.'); return false; }
+  const total = partCount(lines);
+  const colours = [...new Set(lines.map((l) => l.color_name))];
+  const what = colours.length === 1 ? `${colours[0]} pieces` : 'pieces';
+  const { value, data } = await openDialog(`
+    <h2>Move ${esc(what)}</h2>
+    <p class="hint">${pl(total, 'piece', 'pieces')} in ${pl(lines.length, 'line', 'lines')}, from ${esc(from.label)}. Every piece currently shown moves.</p>
+    <label for="bb">To</label>
+    <select id="bb" name="bin">${opts.map((b) => `<option value="${esc(b.id)}">${esc(bins.binLabel(b, ctx.setsByNum))}</option>`).join('')}</select>
+    <div class="row">
+      <button class="btn" value="cancel" formnovalidate>Cancel</button>
+      <button class="btn primary" value="ok">Move ${fmt(total)}</button>
+    </div>`, { data: true });
+  if (value !== 'ok') return false;
+  try {
+    const to = await bins.moveLines(ctx, lines, String(data.get('bin')));
+    toast(`Moved ${pl(total, 'piece', 'pieces')} to ${to.label}`);
+    return true;
+  } catch (e) {
+    toast(e.message || 'Could not move those.');
+    return false;
+  }
 }
 
 // Moves some or all of a line to another bin, in either direction. Nothing moves until you confirm.

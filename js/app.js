@@ -9,7 +9,6 @@ import { renderScan, stopCamera } from './screens/scan.js';
 import { renderHome } from './screens/home.js';
 import { renderBins, renderBin, confirmAbandon } from './screens/bins.js';
 
-const APP_VERSION = '0.3.0 (stage 3)';
 
 // ---------- dialogs ----------
 
@@ -515,13 +514,12 @@ async function renderSettings() {
       <button class="btn danger" id="wipe">Delete all sets and parts</button>
       <p class="hint">Your API key is kept.</p>
     </section>
-    <p class="foot">Brick Sorter ${esc(APP_VERSION)}<br>Not affiliated with the LEGO Group, Rebrickable or Brickognize.</p>`;
+    <p class="foot">Brick Sorter <span id="appVersion">…</span><br>Not affiliated with the LEGO Group, Rebrickable or Brickognize.</p>`;
 
   $('#key').value = key;
-  view.insertAdjacentHTML('beforeend', '<p class="hint" id="appVersion"></p>');
   try {
     const names = (await caches.keys()).filter((n) => n.startsWith('brick-sorter-'));
-    $('#appVersion').textContent = `App version: ${names.map((n) => n.replace('brick-sorter-', '')).sort().pop() || 'not cached yet'}`;
+    $('#appVersion').textContent = `build ${names.map((n) => n.replace('brick-sorter-', '')).sort().pop() || '(not cached yet)'}`;
   } catch { $('#appVersion').textContent = ''; }
   const status = $('#keyStatus');
   const readKey = () => $('#key').value.trim().replace(/^key\s+/i, '');

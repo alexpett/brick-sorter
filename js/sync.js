@@ -1,11 +1,14 @@
 // Backs the app up to a Google Sheet through an Apps Script web app (see apps-script/).
-// Sets, bins, sorted pieces and a few settings are synced. Parts lists are not: they are
-// re-downloaded from Rebrickable on a new device. Newest "updated" time wins per record.
+// Sets, bins, sorted pieces, each set's parts list (in compact chunks) and a few settings are synced,
+// so a new device or a cleared browser restores without asking Rebrickable again.
+// Newest "updated" time wins per record.
 import * as db from './db.js';
 
 const TABLES = ['sets', 'bins', 'inventory'];
 const SETTING_KEYS = ['categoryMap', 'partOverrides', 'recentColors', 'lastColor', 'dailyGoal', 'badgesSeen', 'goalDay'];
 const CHUNK = 400;
+const CELL = 38000; // a sheet cell holds 50,000 characters; parts chunks stay well under
+const BATCH_BYTES = 2_000_000;
 
 export const state = { running: false, error: '', lastAt: '', pending: 0 };
 const listeners = new Set();
@@ -66,14 +69,100 @@ export async function test(cfg) {
 // The activity log needs the newer script. Until the script says it understands it (v >= 2),
 // log entries are held back, not sent and not marked as sent.
 const scriptHasLog = async () => Number((await db.getSetting('scriptV')) || 0) >= 2;
+const scriptHasParts = async () => Number((await db.getSetting('scriptV')) || 0) >= 3;
+
+// ---------- parts lists ----------
+
+const defaultImg = (pn, cid) => `https://cdn.rebrickable.com/media/parts/ldraw/${cid}/${encodeURIComponent(pn)}.png`;
+const packLine = (l) => [l.part_num, l.name, l.cat_id ?? null, l.color_id, l.qty, l.element_id || 0, l.sticker ? 1 : 0, l.img && l.img !== defaultImg(l.part_num, l.color_id) ? l.img : 0];
+
+// A set's parts as chunk records, each small enough for one sheet cell.
+function chunkParts(setNum, at, rows) {
+  const groups = [];
+  let cur = [];
+  let size = 0;
+  for (const l of rows) {
+    const a = packLine(l);
+    const n = JSON.stringify(a).length + 1;
+    if (cur.length && size + n > CELL - 3000) { groups.push(cur); cur = []; size = 0; } // room for the colour and category names
+    cur.push([a, l]); size += n;
+  }
+  if (cur.length) groups.push(cur);
+  return groups.map((g, i) => {
+    const colors = {};
+    const cats = {};
+    for (const [, l] of g) {
+      colors[l.color_id] = [l.color_name, l.rgb, l.is_trans ? 1 : 0];
+      if (l.cat_id != null) cats[l.cat_id] = l.cat_name;
+    }
+    return { id: `${setNum}#${i}`, set_num: setNum, chunk: i, chunks: groups.length, parts_at: at, updated: at, deleted: false, colors, cats, lines: g.map(([a]) => a) };
+  });
+}
+
+async function pendingParts() {
+  if (!(await scriptHasParts())) return [];
+  const synced = (await db.getSetting('partsSynced')) || {};
+  const out = [];
+  for (const s of (await db.all('sets')).filter((x) => !x.deleted)) {
+    const at = s.parts_at || s.added || '';
+    if (!at || synced[s.set_num] === at) continue;
+    const rows = await db.byIndex('setParts', 'set_num', s.set_num);
+    if (!rows.length) continue;
+    out.push({ set_num: s.set_num, at, recs: chunkParts(s.set_num, at, rows) });
+  }
+  return out;
+}
+
+// Rebuilds parts lists from chunks pulled from the sheet, for sets that have none here.
+async function applyParts(recs) {
+  const partial = (await db.getSetting('partsPartial')) || {};
+  for (const r of recs) partial[r.id] = r;
+  const bySet = new Map();
+  for (const r of Object.values(partial)) {
+    if (!bySet.has(r.set_num)) bySet.set(r.set_num, []);
+    bySet.get(r.set_num).push(r);
+  }
+  const synced = (await db.getSetting('partsSynced')) || {};
+  let restored = 0;
+  for (const [setNum, all] of bySet) {
+    const at = all.reduce((m, r) => (r.parts_at > m ? r.parts_at : m), '');
+    const mine = all.filter((r) => r.parts_at === at);
+    const total = mine[0].chunks;
+    const set = await db.get('sets', setNum);
+    if (!set || set.deleted) { for (const r of all) delete partial[r.id]; continue; }
+    if (new Set(mine.map((r) => r.chunk)).size < total) continue; // the rest has not arrived yet
+    for (const r of all) delete partial[r.id];
+    if ((await db.byIndex('setParts', 'set_num', setNum)).length) continue; // already have it
+    const lines = [];
+    for (const r of mine.sort((a, b) => a.chunk - b.chunk)) {
+      for (const [part_num, name, cat_id, color_id, qty, element_id, sticker, img] of r.lines) {
+        const [cname, rgb, trans] = (r.colors && r.colors[color_id]) || [`Colour ${color_id}`, '999999', 0];
+        lines.push({
+          id: `${setNum}|${part_num}|${color_id}`, set_num: setNum, part_num, name, cat_id,
+          cat_name: (r.cats && r.cats[cat_id]) || 'Other', img: img || null, color_id,
+          color_name: cname, rgb: /^[0-9a-f]{6}$/i.test(rgb || '') ? rgb : '999999',
+          is_trans: !!trans, qty, element_id: element_id || null, sticker: !!sticker,
+        });
+      }
+    }
+    await db.putMany('setParts', lines);
+    synced[setNum] = at;
+    restored++;
+  }
+  await db.setSetting('partsPartial', partial);
+  await db.setSetting('partsSynced', synced);
+  return restored;
+}
 
 async function pendingRecords(since) {
-  const out = { sets: [], bins: [], inventory: [], settings: [], log: [] };
+  const out = { sets: [], bins: [], inventory: [], settings: [], log: [], setparts: [] };
   for (const t of TABLES) out[t] = (await db.all(t)).filter((r) => (r.updated || '') > since);
   if (await scriptHasLog()) {
     const logSince = (await db.getSetting('lastLogPushAt')) || '';
     out.log = (await db.all('log')).filter((r) => (r.updated || '') > logSince);
   }
+  out.partsSets = await pendingParts();
+  out.setparts = out.partsSets.flatMap((x) => x.recs);
   for (const k of SETTING_KEYS) {
     const row = await db.get('kv', k);
     if (row && (row.updated || '') > since) out.settings.push(row);
@@ -84,10 +173,11 @@ async function pendingRecords(since) {
 export async function countPending() {
   const since = (await db.getSetting('lastPushAt')) || '';
   const p = await pendingRecords(since);
-  state.pending = p.sets.length + p.bins.length + p.inventory.length + p.settings.length + p.log.length;
+  state.pending = p.sets.length + p.bins.length + p.inventory.length + p.settings.length + p.log.length + p.partsSets.length;
   return state.pending;
 }
 
+let restoredParts = 0;
 async function apply(pulled) {
   let n = 0;
   db.setQuiet(true);
@@ -101,6 +191,11 @@ async function apply(pulled) {
         if (t === 'sets' && rec.deleted) await db.delByIndex('setParts', 'set_num', rec.set_num);
         n++;
       }
+    }
+    if ((pulled.setparts || []).length || Object.keys((await db.getSetting('partsPartial')) || {}).length) {
+      const k = await applyParts(pulled.setparts || []);
+      restoredParts += k;
+      n += k;
     }
     for (const rec of pulled.settings || []) {
       if (!SETTING_KEYS.includes(rec.key)) continue;
@@ -132,29 +227,42 @@ export async function syncNow() {
     const hadLog = await scriptHasLog();
 
     const flat = [];
-    for (const t of [...TABLES, 'settings', 'log']) for (const rec of pending[t]) flat.push([t, rec]);
+    for (const t of [...TABLES, 'settings', 'log', 'setparts']) for (const rec of pending[t]) flat.push([t, rec]);
     const batches = [];
-    for (let i = 0; i < flat.length; i += CHUNK) batches.push(flat.slice(i, i + CHUNK));
+    let cur = [];
+    let bytes = 0;
+    for (const item of flat) {
+      const n = item[0] === 'setparts' ? JSON.stringify(item[1]).length : 600;
+      if (cur.length && (cur.length >= CHUNK || bytes + n > BATCH_BYTES)) { batches.push(cur); cur = []; bytes = 0; }
+      cur.push(item); bytes += n;
+    }
+    if (cur.length) batches.push(cur);
     if (!batches.length) batches.push([]);
+    restoredParts = 0;
 
     let pushed = 0;
     let pulledCount = 0;
     for (const batch of batches) {
-      const changes = { sets: [], bins: [], inventory: [], settings: [], log: [] };
+      const changes = { sets: [], bins: [], inventory: [], settings: [], log: [], setparts: [] };
       for (const [t, rec] of batch) changes[t].push(rec);
       const res = await call(cfg, { since: Number((await db.getSetting('syncSeq')) || 0), changes });
       pushed += batch.length;
       pulledCount += await apply(res.changes || {});
       seq = res.seq;
-      if (res.v >= 2 && !hadLog) { await db.setSetting('scriptV', res.v); schedule(500); }
+      if (res.v > Number((await db.getSetting('scriptV')) || 0)) { await db.setSetting('scriptV', res.v); schedule(500); }
       await db.setSetting('syncSeq', seq);
+    }
+    if (pending.partsSets.length && (await scriptHasParts())) {
+      const synced = (await db.getSetting('partsSynced')) || {};
+      for (const x of pending.partsSets) synced[x.set_num] = x.at;
+      await db.setSetting('partsSynced', synced);
     }
     await db.setSetting('lastPushAt', startedAt);
     if (hadLog) await db.setSetting('lastLogPushAt', startedAt);
     state.lastAt = new Date().toISOString();
     await db.setSetting('lastSyncAt', state.lastAt);
     await countPending();
-    return { pushed, pulled: pulledCount };
+    return { pushed, pulled: pulledCount, partsRestored: restoredParts };
   } catch (e) {
     state.error = e.message || String(e);
     throw e;
@@ -169,6 +277,7 @@ export async function resetCursor() {
   await db.setSetting('lastPushAt', '');
   await db.setSetting('lastLogPushAt', '');
   await db.setSetting('syncSeq', 0);
+  await db.setSetting('partsSynced', {});
 }
 
 // ---------- automatic syncing ----------

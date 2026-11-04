@@ -38,3 +38,7 @@ After editing the script, choose **Deploy > Manage deployments**, edit the deplo
 ## Updating for goals and badges
 
 The goals, streaks and badges keep a small activity log (one row per save). To back it up and share it between devices, paste the current `Code.gs` into the script and deploy a new version (Deploy → Manage deployments → edit → New version). Until you do, the log stays on each device and nothing is lost; it is sent the first time the app sees the updated script.
+
+## Updating for parts lists (script version 3)
+
+Each set's parts list is now backed up to a new `setparts` tab, in compact chunks. After a reset or on a new device, the app restores the parts lists from your sheet instead of asking Rebrickable again. To switch it on, paste the current `Code.gs` into the script and deploy a new version (Deploy → Manage deployments → edit → New version). Until you do, everything works as before; the parts lists are sent the first time the app sees the updated script.

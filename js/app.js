@@ -98,6 +98,7 @@ async function storeSet(info, results, catMap, previous) {
     sticker_lines: lines.filter((l) => l.sticker).length,
     spares,
     added: previous?.added || now,
+    parts_at: now,
     updated: now,
     deleted: false,
   };
@@ -618,7 +619,8 @@ async function restoreMissingParts() {
 
 async function afterSync(r) {
   if (r.pulled) {
-    await restoreMissingParts();
+    if (r.partsRestored) toast(`Restored the parts lists for ${r.partsRestored} ${r.partsRestored === 1 ? 'set' : 'sets'} from your sheet.`);
+    await restoreMissingParts(); // only sets the sheet had no parts for (older backups) go to Rebrickable
     const hash = location.hash;
     if (!/^#\/(add|settings)/.test(hash) && !document.querySelector('dialog[open]')) await route(); // refresh what's on screen
   }

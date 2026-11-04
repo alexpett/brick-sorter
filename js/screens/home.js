@@ -2,6 +2,7 @@
 import * as bins from '../bins.js';
 import { view, esc, fmt, setTitle, openDialog, toast } from '../ui.js';
 import * as rewards from '../rewards.js';
+import * as sync from '../sync.js';
 
 const reduced = () => window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
 
@@ -96,7 +97,15 @@ export async function renderHome() {
       </li>`;
   }).join('');
 
+  // Right after clearing browser data the app looks empty until the sheet has been read; say so.
+  let restoring = '';
+  if (setsAdded === 0 && (await sync.isConfigured().catch(() => false))) {
+    restoring = `<section class="panel"><h2>${sync.state.running ? 'Restoring from your Google Sheet…' : 'Nothing on this device yet'}</h2>
+      <p>${sync.state.running ? 'Your sets, bins and sorted pieces are being brought back, parts lists included. Nothing has been lost.' : 'Your data is safe in your Google Sheet. Open Settings and tap Sync now to bring it back.'}</p>
+      ${sync.state.running ? '' : '<a class="btn primary" href="#/settings">Open Settings</a>'}</section>`;
+  }
   view.innerHTML = `
+    ${restoring}
     <section class="stats" id="stats">
       ${stat('Sets added', setsAdded)}
       ${stat('Pieces found', found, 'in your set bins')}

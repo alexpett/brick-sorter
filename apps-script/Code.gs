@@ -16,7 +16,7 @@ function secretCode() {
   return PropertiesService.getScriptProperties().getProperty('SECRET_CODE') || '';
 }
 
-const TABLES = ['sets', 'bins', 'inventory', 'settings', 'log'];
+const TABLES = ['sets', 'bins', 'inventory', 'settings', 'log', 'setparts'];
 const HEADER = ['key', 'updated', 'deleted', 'seq', 'summary', 'json'];
 const COLS = HEADER.length;
 
@@ -90,7 +90,7 @@ function handle(body) {
   }
 
   props.setProperty('seq', String(seq));
-  return { ok: true, v: 2, seq: seq, changes: pulled };
+  return { ok: true, v: 3, seq: seq, changes: pulled };
 }
 
 // Camera fallback: forwards a photo to Brickognize from Google's servers, in case the browser
@@ -123,6 +123,7 @@ function summary(table, r) {
   if (table === 'sets') return r.set_num + ' ' + r.name + ' [' + (r.status || '') + (r.active_bin ? ' bin ' + r.active_bin : '') + ']';
   if (table === 'bins') return r.type === 'active' ? 'Bin ' + r.number + ' (' + r.set_num + ')' : r.label;
   if (table === 'settings') return r.key;
+  if (table === 'setparts') return r.set_num + ' parts, chunk ' + (Number(r.chunk) + 1) + ' of ' + r.chunks + ' (' + (r.lines ? r.lines.length : 0) + ' lines)';
   if (table === 'log') return r.qty + ' pieces at ' + r.t;
   return '';
 }

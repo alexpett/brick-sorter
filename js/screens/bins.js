@@ -76,6 +76,7 @@ export async function renderBins() {
       </form>
     </section>
     <a class="btn block" href="#/bin/all">Search all pieces</a>
+    <button type="button" class="btn block" id="exportSort">Export sorting data</button>
     <details class="panel rules" id="rules"><summary>Storage rules</summary><div id="rulesBody"></div></details>`;
 
   $('#addBinForm').addEventListener('submit', async (e) => {
@@ -87,11 +88,45 @@ export async function renderBins() {
       toast(err.message);
     }
   });
+  $('#exportSort').addEventListener('click', async () => {
+    try { toast(await exportSorting(ctx)); } catch (err) { toast(err.message || 'Could not export.'); }
+  });
   $('#rules').addEventListener('toggle', () => { if ($('#rules').open) drawRules(); });
   if (location.hash === '#/bins' && sessionStorageOpen()) { $('#rules').open = true; drawRules(); }
 }
 
 const $ = (sel) => view.querySelector(sel);
+
+// A file of what is in each storage bin, the current rules and recent choices, to share for tuning the rules.
+async function exportSorting(ctx) {
+  const label = (id) => ctx.bins.find((b) => b.id === id)?.label || id;
+  const colour = (id) => refdata.ref.colorById.get(id);
+  const storage = ctx.bins.filter((b) => b.type === 'storage' && !b.deleted);
+  const lines = [];
+  for (const b of storage) {
+    for (const l of ctx.byBin.get(b.id) || []) {
+      const c = colour(l.color_id);
+      lines.push({ bin: b.label, part_num: l.part_num, name: l.name, category: refdata.categoryName(l.cat_id), colour: l.color_name, colour_group: c ? refdata.colorGroup(c) : null, qty: l.qty, sticker: !!l.sticker, printed: !!l.printed, note: l.note || undefined });
+    }
+  }
+  const log = (await db.getSetting('storageLog')) || [];
+  const out = {
+    exported: new Date().toISOString(),
+    note: 'Pieces held in storage bins, the storage rules in force, and the last storage choices made on this device.',
+    storage_bins: storage.map((b) => ({ label: b.label, description: b.desc || '', full: !!b.full, pieces: partCount(ctx.byBin.get(b.id) || []) })),
+    category_rules: Object.entries(ctx.catMap || {}).map(([cat, bin]) => ({ category: refdata.categoryName(Number(cat)), bin: label(bin) })),
+    part_exceptions: Object.entries(ctx.overrides || {}).map(([part, bin]) => ({ part_num: part, bin: label(bin) })),
+    recent_choices: log.map((e) => ({ when: e.t, category: refdata.categoryName(e.cat), part_num: e.part, chosen: label(e.bin), suggested: e.sug ? label(e.sug) : null })),
+    lines,
+  };
+  const blob = new Blob([JSON.stringify(out, null, 1)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `brick-sorter-storage-${out.exported.slice(0, 10)}.json`;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+  return `Exported ${pl(lines.length, 'line', 'lines')} from ${pl(storage.length, 'storage bin', 'storage bins')}.`;
+}
 function sessionStorageOpen() { return false; }
 
 async function drawRules() {

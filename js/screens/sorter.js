@@ -197,11 +197,19 @@ export function createSorter(el, { onSaved, onChangePart } = {}) {
     if (!list.length) return '';
     if (!st.sugOpen) return `<div class="suggest"><button type="button" class="linkbtn" id="showSug">Show colours needed by your sets (${list.length})</button></div>`;
     return `<div class="suggest">
-      <p class="suggest-label">Needed by your sets — tap to use</p>
-      <div class="flagrow">${list.map((c) => {
-        const col = colorOf(c.id);
-        return `<button type="button" class="chip" data-usecolor="${c.id}" aria-pressed="${c.id === colorId}">${swatchHtml(col)} ${esc(col.name)} · ${fmt(c.rem)} <small>${[...c.bins].sort((a, b) => a - b).map((n) => `Bin ${n}`).join(', ')}</small></button>`;
-      }).join('')}</div>
+      <p class="suggest-label">Your current colour and the ones your sets need — tap to use</p>
+      <div class="flagrow">${(() => {
+        // The colour already chosen comes first, so keeping it is one tap like any other.
+        const items = list.slice();
+        const at = items.findIndex((c) => c.id === colorId);
+        const cur = at >= 0 ? items.splice(at, 1)[0] : (colorId !== null && colorOf(colorId) ? { id: colorId, rem: 0, bins: new Set() } : null);
+        if (cur) items.unshift({ ...cur, current: true });
+        return items.map((c) => {
+          const col = colorOf(c.id);
+          const bl = [...c.bins].sort((a, b) => a - b).map((n) => `Bin ${n}`).join(', ');
+          return `<button type="button" class="chip${c.current ? ' current' : ''}" data-usecolor="${c.id}" aria-pressed="${c.id === colorId}">${swatchHtml(col)} ${esc(col.name)}${c.rem > 0 ? ` · ${fmt(c.rem)}` : ''} <small>${c.current ? `Current${bl ? ` · ${bl}` : ''}` : bl}</small></button>`;
+        }).join('');
+      })()}</div>
     </div>`;
   }
 

@@ -305,9 +305,12 @@ export async function removeRule(kind, key) {
 // items: [{ binId, qty }]. Identical pieces in the same bin are merged into one line.
 export async function saveToBins({ part, color, flags, note, items, log = true }) {
   const now = nowIso();
+  const receipt = { log: [], inv: [] }; // enough to put everything back (see undoSave)
   if (log) {
     for (const it of items) {
-      await db.put('log', { id: uid(), t: now, qty: it.qty, part_num: part.part_num || '', bin_id: it.binId, updated: now, deleted: false });
+      const row = { id: uid(), t: now, qty: it.qty, part_num: part.part_num || '', bin_id: it.binId, updated: now, deleted: false };
+      await db.put('log', row);
+      receipt.log.push(row.id);
     }
   }
   for (const it of items) {
@@ -317,8 +320,9 @@ export async function saveToBins({ part, color, flags, note, items, log = true }
       && (l.note || '') === (note || ''));
     if (same) {
       await db.put('inventory', { ...same, qty: same.qty + it.qty, updated: now });
+      receipt.inv.push({ id: same.id, before: same });
     } else {
-      await db.put('inventory', {
+      const row = {
         id: uid(),
         part_num: part.part_num,
         name: part.name,
@@ -335,9 +339,35 @@ export async function saveToBins({ part, color, flags, note, items, log = true }
         created: now,
         updated: now,
         deleted: false,
-      });
+      };
+      await db.put('inventory', row);
+      receipt.inv.push({ id: row.id, before: null, row });
     }
   }
+  return receipt;
+}
+
+// The storage rules and history, so an undo can put them back as they were.
+export async function rulesSnapshot() {
+  const out = {};
+  for (const k of ['storageLog', 'categoryMap', 'partOverrides']) out[k] = (await db.getSetting(k)) ?? null;
+  return out;
+}
+
+// Reverses one saveToBins (and optionally the rules learnt from it). Nothing is ever hard-deleted.
+export async function undoSave(receipt, rules = null) {
+  const now = nowIso();
+  for (const id of receipt.log) {
+    const r = await db.get('log', id);
+    if (r) await db.put('log', { ...r, deleted: true, updated: now });
+  }
+  for (const c of receipt.inv.slice().reverse()) {
+    const cur = await db.get('inventory', c.id);
+    if (!cur) continue;
+    if (c.before) await db.put('inventory', { ...cur, qty: c.before.qty, updated: now });
+    else await db.put('inventory', { ...cur, deleted: true, updated: now });
+  }
+  if (rules) for (const [k, v] of Object.entries(rules)) await db.setSetting(k, v ?? (k === 'storageLog' ? [] : {}));
 }
 
 // Which active bins still want each part+colour: Map 'part|colour' -> [{ bin, rem }].

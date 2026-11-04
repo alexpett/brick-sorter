@@ -31,6 +31,7 @@ export async function renderAdd() {
   sorter = createSorter($r('#sorterBox'), {
     onSaved: () => { query = ''; drawPart(); },
     onChangePart: () => drawPart(),
+    onUndo: () => { $r('#stepPart').hidden = true; },
   });
   root.addEventListener('click', onClick);
   root.addEventListener('input', onInput);

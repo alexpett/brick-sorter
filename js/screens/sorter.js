@@ -215,7 +215,31 @@ export function pickColor(current = colorId, { allOnly = false, only = null, mul
 
 // ---------- the panel ----------
 
-export function createSorter(el, { onSaved, onChangePart } = {}) {
+// A small "Undo" pill after each save. It fades after a few seconds and only ever undoes the last save.
+let undoEl = null, undoTimer = null;
+function hideUndo() {
+  clearTimeout(undoTimer);
+  if (undoEl) { undoEl.classList.remove('show'); undoEl.disabled = true; }
+}
+function offerUndo(fn) {
+  clearTimeout(undoTimer);
+  if (!undoEl) {
+    undoEl = document.createElement('button');
+    undoEl.type = 'button';
+    undoEl.id = 'undoPill';
+    undoEl.textContent = '↶ Undo';
+    document.body.appendChild(undoEl);
+    window.addEventListener('hashchange', hideUndo);
+  }
+  const btn = undoEl;
+  btn.onclick = async () => { hideUndo(); try { await fn(); } catch (e) { toast(e.message || 'Could not undo.'); } };
+  btn.disabled = false;
+  void btn.offsetWidth; // restart the fade
+  btn.classList.add('show');
+  undoTimer = setTimeout(hideUndo, 9000);
+}
+
+export function createSorter(el, { onSaved, onChangePart, onUndo } = {}) {
   const st = { part: null, qtyText: '1', flags: { sticker: false, printed: false, other: false }, note: '', saving: false, sugOpen: true };
   el.classList.add('sorter');
   el.hidden = true;
@@ -423,7 +447,18 @@ export function createSorter(el, { onSaved, onChangePart } = {}) {
         if (!e || e.rem < it.qty) { toast(`Bin ${b.number} doesn’t need that many.`); return; }
       }
       const suggestedStore = part.unrec ? null : bins.resolveStorage(info.ctx, part, colorId);
-      await bins.saveToBins({ part, color: colorOf(colorId), flags: st.flags, note: st.note.trim(), items });
+      const rulesBefore = await bins.rulesSnapshot();
+      const before = { part, colorId, qty: st.qtyText, flags: { ...st.flags }, note: st.note };
+      const receipt = await bins.saveToBins({ part, color: colorOf(colorId), flags: st.flags, note: st.note.trim(), items });
+      offerUndo(async () => {
+        await bins.undoSave(receipt, rulesBefore);
+        await refreshInfo();
+        Object.assign(st, { part: before.part, qtyText: before.qty, flags: before.flags, note: before.note, sugOpen: true });
+        await chooseColor(before.colorId);
+        onUndo?.();
+        renderTop();
+        toast('Undone. Choose the right bin.');
+      });
       const where = items.map((it) => {
         const b = info.ctx.bins.find((x) => x.id === it.binId);
         return `${fmt(it.qty)} in ${b?.type === 'active' ? `Bin ${b.number}` : b?.label || 'storage'}`;
@@ -517,6 +552,7 @@ export function createSorter(el, { onSaved, onChangePart } = {}) {
 
   return {
     async setPart(part) {
+      hideUndo();
       st.part = part;
       st.sugOpen = true;
       st.qtyText = '1';

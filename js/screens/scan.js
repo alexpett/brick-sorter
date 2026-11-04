@@ -52,6 +52,7 @@ export async function renderScan() {
   root = view.querySelector('#scanRoot');
   sorter = createSorter($r('#sorterBox'), {
     onSaved: () => showLive(),
+    onUndo: () => { root.classList.add('compact'); $r('#matches').hidden = true; },
     onChangePart: () => { root.classList.remove('compact'); $r('#matches').hidden = false; },
   });
   root.addEventListener('click', onClick);

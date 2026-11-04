@@ -59,7 +59,7 @@ export async function renderBins() {
             <span class="binchip store big"${bins.chipStyle(b)}>${esc(b.label.slice(0, 2).toUpperCase())}</span>
             <div class="cardtext">
               <div class="cardname">${esc(b.label)}</div>
-              <div class="cardmeta">${fmt(count(b.id))} ${count(b.id) === 1 ? 'piece' : 'pieces'}${b.desc ? ` · ${esc(b.desc)}` : ''}${wantedLines(b.id) ? ` · <span class="tag ok">${wantedLines(b.id)} ${wantedLines(b.id) === 1 ? 'line' : 'lines'} wanted by active sets</span>` : ''}</div>
+              <div class="cardmeta">${fmt(count(b.id))} ${count(b.id) === 1 ? 'piece' : 'pieces'}${b.desc ? ` · ${esc(b.desc)}` : ''}${b.full ? ' · <span class="tag warn">Full</span>' : ''}${wantedLines(b.id) ? ` · <span class="tag ok">${wantedLines(b.id)} ${wantedLines(b.id) === 1 ? 'line' : 'lines'} wanted by active sets</span>` : ''}</div>
             </div>
             <span class="chev" aria-hidden="true">›</span>
           </a>
@@ -107,9 +107,15 @@ async function drawRules() {
     const i = refdata.ref.byNum.get(String(pn).toLowerCase());
     return i === undefined ? pn : `${refdata.ref.parts[i][1]} (${pn})`;
   };
+  const log = (await db.getSetting('storageLog')) || [];
+  const labelOf = (id) => ctx.bins.find((b) => b.id === id)?.label || 'a deleted bin';
+  const recentText = (id) => {
+    const r = bins.recentChoices(log, id);
+    return r.length ? `<br><small>Lately: ${r.map((x) => `${esc(labelOf(x.bin))} × ${x.n}`).join(', ')}</small>` : '';
+  };
   const rows = [
     ...cats.map(([id, bin]) => `
-      <li><span>${esc(refdata.categoryName(Number(id)))} <small>(every part)</small></span>
+      <li><span>${esc(refdata.categoryName(Number(id)))} <small>(every part)</small>${recentText(id)}</span>
       ${select('category', id, bin)}<button class="linkbtn" data-rule-del="category" data-rule-key="${esc(id)}">Remove</button></li>`),
     ...parts.map(([pn, bin]) => `
       <li><span>${esc(partName(pn))}</span>
@@ -117,7 +123,7 @@ async function drawRules() {
   ];
   const body = $('#rulesBody');
   body.innerHTML = rows.length
-    ? `<p class="hint">Where pieces that no active set needs are stored. A rule for one part beats the rule for its category.</p><ul class="rulelist">${rows.join('')}</ul>`
+    ? `<p class="hint">Where pieces that no active set needs are stored. A rule for one part beats the rule for its category. The rules follow you: choose a different bin and that part goes there next time, and when most recent pieces of a category go to one bin, the category follows. A full bin is skipped.</p><ul class="rulelist">${rows.join('')}</ul>`
     : '<p class="hint">No rules yet. The first time a piece needs storage, the app asks which bin and remembers.</p>';
   body.onchange = async (e) => {
     const s = e.target.closest('select[data-rule-kind]');
@@ -237,9 +243,11 @@ export async function renderBin(id, keepMode = false) {
       <section class="panel">
         <h2 class="setname">${esc(bin.label)}</h2>
         <p class="cardmeta">${fmt(partCount(lines))} ${partCount(lines) === 1 ? 'piece' : 'pieces'}${bin.desc ? ` · ${esc(bin.desc)}` : ''}</p>
+        ${bin.full ? '<p class="hint">This bin is full. Nothing new is suggested or accepted here until you reopen it.</p>' : ''}
         <div class="actions">
           <button class="btn" id="binColor">Bin colour</button>
-          ${bin.locked ? '' : `<button class="btn" id="rename">Rename</button>
+          ${bin.locked ? '' : `<button class="btn${bin.full ? ' primary' : ''}" id="fullToggle" aria-pressed="${!!bin.full}">${bin.full ? 'Reopen bin' : 'Mark as full'}</button>
+          <button class="btn" id="rename">Rename</button>
           <button class="btn danger" id="delBin">Delete bin</button>`}
         </div>
       </section>`;
@@ -411,6 +419,11 @@ export async function renderBin(id, keepMode = false) {
     await bins.setBinColor(bin.id, hex);
     await renderBin(id, true);
   });
+  $('#fullToggle')?.addEventListener('click', async () => {
+    await bins.setBinFull(bin.id, !bin.full);
+    toast(bin.full ? `${bin.label} is open again.` : `${bin.label} marked as full.`);
+    await renderBin(id, true);
+  });
   $('#abandon')?.addEventListener('click', async () => {
     if (await confirmAbandon(bin.id)) location.hash = '#/bins';
   });
@@ -539,7 +552,7 @@ async function moveLineDialog(line, ctx, wm) {
   const wantRem = new Map(wants.map((w) => [w.bin.id, w.rem]));
   const cur = ctx.bins.find((b) => b.id === line.bin_id);
   const opts = ctx.bins
-    .filter((b) => !b.deleted && b.id !== line.bin_id && b.id !== 'unrecognised' && (b.type === 'storage' || wantRem.has(b.id)))
+    .filter((b) => !b.deleted && b.id !== line.bin_id && b.id !== 'unrecognised' && ((b.type === 'storage' && !b.full) || wantRem.has(b.id)))
     .sort((a, b) => (wantRem.has(b.id) ? 0 : 1) - (wantRem.has(a.id) ? 0 : 1) || (a.type === b.type ? (a.number ?? a.order ?? 0) - (b.number ?? b.order ?? 0) : a.type === 'active' ? -1 : 1));
   if (!opts.length) { toast('There is nowhere to move this to.'); return false; }
   const dflt = cur?.type === 'storage' ? opts.find((b) => wantRem.has(b.id)) || opts[0]
@@ -584,7 +597,7 @@ async function editLine(line, ctx, draft = {}) {
     needs.set(b.id, rows.filter((l) => l.part_num === line.part_num));
   }
   const binOptions = ctx.bins
-    .filter((b) => b.type !== 'active' || b.id === line.bin_id || (needs.get(b.id) || []).length)
+    .filter((b) => (b.type !== 'active' || b.id === line.bin_id || (needs.get(b.id) || []).length) && !(b.type === 'storage' && b.full && b.id !== line.bin_id))
     .slice()
     .sort((a, b) => (a.type === b.type ? (a.number ?? a.order ?? 0) - (b.number ?? b.order ?? 0) : a.type === 'active' ? -1 : 1))
     .map((b) => `<option value="${esc(b.id)}"${b.id === binVal ? ' selected' : ''}>${esc(bins.binLabel(b, ctx.setsByNum))}</option>`).join('');

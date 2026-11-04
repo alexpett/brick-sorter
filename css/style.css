@@ -528,3 +528,8 @@ dialog .colorbtn { width: 100%; }
 .dlgstepper { margin: 6px 0 12px; width: fit-content; }
 .dlgstepper input { -moz-appearance: textfield; appearance: textfield; }
 .dlgstepper input::-webkit-outer-spin-button, .dlgstepper input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+
+/* full storage bins */
+.tilebadge.full { background: var(--warn); color: var(--accent-ink); }
+.tile:disabled .tilebadge.full { opacity: 1; }
+.tag.warn { color: var(--warn); border-color: var(--warn); }

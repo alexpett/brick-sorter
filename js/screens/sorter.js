@@ -268,11 +268,13 @@ export function createSorter(el, { onSaved, onChangePart } = {}) {
       const name = isActive ? (ctx.setsByNum.get(b.set_num)?.name || '') : b.label;
       const s = sugMap.has(b.id);
       // An active bin only takes what its set still needs.
-      const blocked = isActive && remFor(b) <= 0;
+      const full = !isActive && !!b.full;
+      const blocked = (isActive && remFor(b) <= 0) || full;
       return `
-        <button type="button" class="tile${s ? ' suggested' : ''}" data-bin="${esc(b.id)}"${q === null || colorId === null || blocked ? ' disabled' : ''}${blocked ? ' title="This set doesn’t need this piece"' : ''}>
+        <button type="button" class="tile${s ? ' suggested' : ''}" data-bin="${esc(b.id)}"${q === null || colorId === null || blocked ? ' disabled' : ''}${blocked ? ` title="${full ? 'This bin is full' : 'This set doesn’t need this piece'}"` : ''}>
           <span class="binchip big${isActive ? '' : ' store'}"${bins.chipStyle(b)}>${esc(label)}</span>
           <span class="tilename">${esc(name)}</span>
+          ${full ? '<span class="tilebadge full">Full</span>' : ''}
           ${s && (split || partial) ? `<span class="tilebadge">${fmt(sugMap.get(b.id))}</span>` : ''}
         </button>`;
     };
@@ -286,6 +288,9 @@ export function createSorter(el, { onSaved, onChangePart } = {}) {
     } else if (split) {
       const lbl = (id) => { const b = ctx.bins.find((x) => x.id === id); return b.type === 'active' ? `Bin ${b.number}` : b.label; };
       note = `<p class="hint">Suggested split: ${sug.dest.map((d) => `${fmt(d.qty)} → ${esc(lbl(d.binId))}`).join(', ')}. <button type="button" class="linkbtn" id="useSplit">Use this split</button></p>`;
+    } else if (sug?.needsRule && st.part && !st.part.unrec && bins.ruleBinId(ctx, st.part)) {
+      const fb = ctx.bins.find((x) => x.id === bins.ruleBinId(ctx, st.part));
+      note = `<p class="hint">${esc(fb?.label || 'The usual bin')} is full. Choose another storage bin and the app will use it from now on.</p>`;
     } else if (sug?.needsRule) {
       note = `<p class="hint">No storage rule for this part yet. Tap a storage bin and the app will remember it for ${st.part.cat_id != null ? `every part in “${esc(refdata.categoryName(st.part.cat_id))}”` : 'this part'}.</p>`;
     }
@@ -338,7 +343,7 @@ export function createSorter(el, { onSaved, onChangePart } = {}) {
         const e = (info.neededBy.get(part.part_num) || []).find((x) => x.bin.id === b.id && x.colorId === colorId);
         if (!e || e.rem < it.qty) { toast(`Bin ${b.number} doesn’t need that many.`); return; }
       }
-      const ruleMissing = !part.unrec && bins.resolveStorage(info.ctx, part) === null;
+      const suggestedStore = part.unrec ? null : bins.resolveStorage(info.ctx, part);
       await bins.saveToBins({ part, color: colorOf(colorId), flags: st.flags, note: st.note.trim(), items });
       const where = items.map((it) => {
         const b = info.ctx.bins.find((x) => x.id === it.binId);
@@ -347,9 +352,11 @@ export function createSorter(el, { onSaved, onChangePart } = {}) {
       let extra = '';
       const stores = items.map((it) => info.ctx.bins.find((x) => x.id === it.binId)).filter((b) => b && b.type === 'storage' && !b.locked);
       const target = stores.length === 1 ? stores[0] : null;
-      if (ruleMissing && target) {
-        await bins.rememberStorage({ part, binId: target.id, scope: part.cat_id != null ? 'category' : 'part', ctx: info.ctx });
-        extra = ` Remembered for ${part.cat_id != null ? refdata.categoryName(part.cat_id) : 'this part'}.`;
+      if (target && !part.unrec) {
+        extra = await bins.learnStorage({
+          part, chosenId: target.id, suggestedId: suggestedStore, ctx: info.ctx,
+          catName: part.cat_id != null ? refdata.categoryName(part.cat_id) : '',
+        });
       }
       toast(`Saved: ${where}.${extra}`);
       await refreshInfo();

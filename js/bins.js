@@ -163,11 +163,79 @@ export function allocate(ctx, partNum, colorId, qty) {
 // Storage bin for a part: a rule for that exact part wins, then the rule for its category.
 // Returns null when nothing has been chosen yet, so the app can ask.
 export function resolveStorage(ctx, part) {
-  const valid = (id) => !!id && ctx.bins.some((b) => b.id === id && b.type === 'storage' && !b.locked);
+  const valid = (id) => !!id && ctx.bins.some((b) => b.id === id && b.type === 'storage' && !b.locked && !b.full);
   const byPart = ctx.overrides[part.part_num];
   if (valid(byPart)) return byPart;
   const byCat = part.cat_id != null ? ctx.catMap[String(part.cat_id)] : null;
   return valid(byCat) ? byCat : null;
+}
+
+// The bin a rule points at even if it is full (so the app can say "X is full").
+export function ruleBinId(ctx, part) {
+  const ok = (id) => !!id && ctx.bins.some((b) => b.id === id && b.type === 'storage' && !b.locked);
+  const byPart = ctx.overrides[part.part_num];
+  if (ok(byPart)) return byPart;
+  const byCat = part.cat_id != null ? ctx.catMap[String(part.cat_id)] : null;
+  return ok(byCat) ? byCat : null;
+}
+
+// Mark a storage bin full (nothing more is suggested or accepted) or open it again.
+export async function setBinFull(binId, full) {
+  const bin = await db.get('bins', binId);
+  if (!bin || bin.deleted || bin.type !== 'storage' || bin.locked) throw new Error('That bin cannot be marked full.');
+  await db.put('bins', { ...bin, full: !!full, updated: nowIso() });
+}
+
+const RECENT_WINDOW = 5; // how many recent choices in a category are looked at
+const RECENT_NEEDED = 3; // how many of them must agree before the category rule changes
+
+// Called after pieces are saved into one storage bin. Keeps a small history of choices and lets
+// the rules follow what you actually do:
+//  - no rule yet: remember the choice for the category
+//  - you chose a different bin from the suggestion: that part now goes there, and if most of the
+//    recent pieces in the category went there too, the category rule moves as well
+//  - you chose the category's usual bin again: the part's own exception is dropped
+// Returns a short sentence for the "Saved" toast, or ''.
+export async function learnStorage({ part, chosenId, suggestedId, ctx, catName }) {
+  const chosen = ctx.bins.find((b) => b.id === chosenId);
+  if (!part?.part_num || !chosen || chosen.type !== 'storage' || chosen.locked) return '';
+  const label = chosen.label;
+  const log = ((await db.getSetting('storageLog')) || []).slice(-299);
+  log.push({ t: nowIso(), cat: part.cat_id ?? null, part: part.part_num, bin: chosenId, sug: suggestedId || null });
+  await db.setSetting('storageLog', log);
+  const catKey = part.cat_id != null ? String(part.cat_id) : null;
+  const named = catName ? `“${catName}”` : 'this part';
+
+  if (!suggestedId) {
+    await rememberStorage({ part, binId: chosenId, scope: catKey ? 'category' : 'part', ctx });
+    return ` Remembered for ${catKey ? named : 'this part'}.`;
+  }
+  if (chosenId === suggestedId) return '';
+
+  // An override. The category's usual bin (valid ones only) decides whether this is a one-off.
+  const usual = catKey ? ctx.catMap[catKey] : null;
+  if (usual === chosenId) {
+    await removeRule('part', part.part_num);
+    return ` Back to the usual bin for ${named}.`;
+  }
+  await rememberStorage({ part, binId: chosenId, scope: 'part', ctx });
+  let msg = ` This part will go to ${label} from now on.`;
+  if (catKey) {
+    const recent = log.filter((e) => String(e.cat) === catKey).slice(-RECENT_WINDOW);
+    if (recent.filter((e) => e.bin === chosenId).length >= RECENT_NEEDED) {
+      await rememberStorage({ part, binId: chosenId, scope: 'category', ctx });
+      msg = ` ${named} now goes to ${label} (${recent.filter((e) => e.bin === chosenId).length} of the last ${recent.length}).`;
+    }
+  }
+  return msg;
+}
+
+// What has been chosen lately for a category, for the rules screen: [{ bin, n }] most first.
+export function recentChoices(log, catId, limit = 10) {
+  const recent = (log || []).filter((e) => String(e.cat) === String(catId)).slice(-limit);
+  const counts = new Map();
+  for (const e of recent) counts.set(e.bin, (counts.get(e.bin) || 0) + 1);
+  return [...counts.entries()].map(([bin, n]) => ({ bin, n })).sort((a, b) => b.n - a.n);
 }
 
 export async function rememberStorage({ part, binId, scope, ctx }) {

@@ -266,12 +266,20 @@ export async function renderBin(id, keepMode = false) {
   if (!isAll && bin.type === 'active') {
     const a = ctx.active.find((x) => x.bin.id === bin.id);
     const pct = a ? Math.round(a.frac * 100) : 0;
+    const img = a?.set.img || null;
     head = `
       <section class="panel">
-        <h2 class="setname">${bins.colorSquare(bin)}${esc(a?.set.name || 'Set')}</h2>
-        <p class="cardmeta">${esc(bin.set_num)}${a ? ` · ${fmt(a.heldTotal)} of ${fmt(a.neededTotal)} pieces · ${pct}%` : ''}</p>
-        <div class="bar solid" aria-hidden="true"><i style="--p:${pct}%"></i></div>
-        <div class="actions"><button class="btn" id="binColor">Bin colour</button><button class="btn danger" id="abandon">Abandon this bin</button></div>
+        <div class="binhead">
+          <div class="setpic" style="--p:${pct / 100}" role="img" aria-label="${pct}% complete">
+            ${img ? `<img src="${esc(img)}" alt="">` : ''}
+            <span class="pctbadge" aria-hidden="true">${pct}%</span>
+          </div>
+          <div class="binhead-text">
+            <h2 class="setname">${bins.colorSquare(bin)}${esc(a?.set.name || 'Set')}</h2>
+            <p class="cardmeta">${esc(bin.set_num)}${a ? `<br>${fmt(a.heldTotal)} of ${fmt(a.neededTotal)} pieces` : ''}</p>
+          </div>
+        </div>
+        <div class="actions spaced"><button class="btn" id="binColor">Bin colour</button><button class="btn danger" id="abandon">Abandon this bin</button></div>
       </section>`;
   } else if (!isAll) {
     head = `

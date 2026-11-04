@@ -518,6 +518,11 @@ async function renderSettings() {
     <p class="foot">Brick Sorter ${esc(APP_VERSION)}<br>Not affiliated with the LEGO Group, Rebrickable or Brickognize.</p>`;
 
   $('#key').value = key;
+  view.insertAdjacentHTML('beforeend', '<p class="hint" id="appVersion"></p>');
+  try {
+    const names = (await caches.keys()).filter((n) => n.startsWith('brick-sorter-'));
+    $('#appVersion').textContent = `App version: ${names.map((n) => n.replace('brick-sorter-', '')).sort().pop() || 'not cached yet'}`;
+  } catch { $('#appVersion').textContent = ''; }
   const status = $('#keyStatus');
   const readKey = () => $('#key').value.trim().replace(/^key\s+/i, '');
 

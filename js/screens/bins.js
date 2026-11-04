@@ -620,7 +620,7 @@ async function binColourDialog(bin, { draft = false } = {}) {
 
 // One place for a storage bin's settings: name, short name, colours and sorting rules. Pass bin = null to
 // make a new bin. Nothing is saved until Save. Resolves true if a bin was created or changed.
-async function editBinDialog(bin, ctx, lines) {
+export async function editBinDialog(bin, ctx, lines) {
   const isNew = !bin;
   const d = {
     label: bin?.label || '', short: bin?.short || '',
@@ -658,7 +658,7 @@ async function editBinDialog(bin, ctx, lines) {
         await bins.setBinShort(id, d.short);
         await bins.setBinColors(id, d.colors);
         await bins.setBinPalette(id, d.palette);
-        return true;
+        return id;
       } catch (e) { err = e.message || 'Could not save.'; }
     }
   }

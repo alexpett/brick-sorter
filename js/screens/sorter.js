@@ -398,32 +398,15 @@ export function createSorter(el, { onSaved, onChangePart } = {}) {
     if (sb && first) sb.style.height = `${first.offsetHeight}px`; // same height as the tiles below
   }
 
-  // Create a storage bin without leaving the Log screen. The new bin is shown but not chosen.
-  async function addBinFlow(error = '', name = '', color = '') {
-    const { value, data } = await openDialog(`
-      <h2>Add storage bin</h2>
-      ${error ? `<p class="hint err" role="alert">${esc(error)}</p>` : ''}
-      <label for="nbn">Name</label>
-      <input id="nbn" name="name" maxlength="30" required autocomplete="off" value="${esc(name)}">
-      <p class="suggest-label">Colour (optional)</p>
-      <div class="cgrid presets pickc">${bins.BIN_COLORS.map((c) => `<label class="cswatch"><input type="radio" name="color" value="${c}"${c === color ? ' checked' : ''}><span class="swatch lg" style="--c:${c}"></span></label>`).join('')}</div>
-      <div class="row">
-        <button class="btn" value="cancel" formnovalidate>Cancel</button>
-        <button class="btn primary" value="add">Add bin</button>
-      </div>`, { data: true });
-    if (value !== 'add') return;
-    const nm = String(data.get('name') || '');
-    const col = String(data.get('color') || '');
-    try {
-      const bin = await bins.addStorageBin(nm);
-      if (col) await bins.setBinColor(bin.id, col);
-    } catch (e) {
-      await addBinFlow(e.message || 'Could not add the bin.', nm, col);
-      return;
-    }
+  // Create a storage bin without leaving the Log screen, with the same dialog as the Store screen
+  // (name, short name, colour, sorting rule). The new bin is shown but not chosen.
+  async function addBinFlow() {
+    const { editBinDialog } = await import('./bins.js');
+    const made = await editBinDialog(null, await bins.loadContext(), []);
+    if (!made) return;
     await refreshInfo();
     renderDest();
-    toast(`Added “${nm.trim()}”.`);
+    toast('Bin added.');
   }
 
   async function commit(items, { keep = 0 } = {}) {

@@ -617,4 +617,3 @@ dialog .colorbtn { width: 100%; }
 /* sets page: dashed "+ Add set" tile */
 .addsettile { display: block; width: 100%; box-sizing: border-box; margin-top: 12px; padding: 20px; border: 2px dashed #b9b2aa; border-radius: 14px; background: transparent; color: var(--muted); font: inherit; font-weight: 700; text-align: center; cursor: pointer; }
 .addsettile:active { background: rgba(0,0,0,.04); }
-#addPanel .btn.block { margin-top: 12px; }

@@ -18,6 +18,21 @@ async function chooseVersion(options) {
       <strong>${esc(o.set_num)}</strong>
       <span>${esc(decode(o.name))} · ${esc(o.year)} · ${fmt(o.num_parts)} pieces</span>
     </button>`).join('');
+  const host = document.querySelector('#addChoice'); // the Add sets pop-up is open: ask inside it
+  if (host) {
+    return new Promise((resolve) => {
+      host.innerHTML = `<h3>Which version?</h3><p>Rebrickable lists more than one match. Pick the one you own.</p>
+        <div class="choices">${buttons.replaceAll('<button class="choice"', '<button type="button" class="choice"')}</div>
+        <button type="button" class="btn" data-cancel>Cancel</button>`;
+      host.hidden = false;
+      host.onclick = (e) => {
+        const b = e.target.closest('.choice, [data-cancel]');
+        if (!b) return;
+        host.hidden = true; host.innerHTML = ''; host.onclick = null;
+        resolve(b.matches('.choice') ? options[Number(b.value)] : null);
+      };
+    });
+  }
   const result = await openDialog(`
     <h2>Which version?</h2>
     <p>Rebrickable lists more than one match. Pick the one you own.</p>
@@ -154,19 +169,6 @@ async function renderSets() {
       <h2>Add your Rebrickable key first</h2>
       <p>The app needs your free API key to fetch parts lists. <a href="#/settings">Open Settings</a></p>
     </section>`}
-    <section class="panel" id="addPanel" hidden>
-      <h2>Add sets</h2>
-      <form id="addForm" autocomplete="off">
-        <label for="nums">Set numbers</label>
-        <div class="inline">
-          <input id="nums" name="nums" inputmode="text" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="e.g. 41395, 76396">
-          <button class="btn primary" id="addBtn">Add</button>
-        </div>
-      </form>
-      <p class="hint">Use commas or spaces to add several at once. Version -1 is assumed unless you type one, like 75192-2.</p>
-      <ul id="addLog" class="log" aria-live="polite"></ul>
-      <button type="button" class="btn block" id="closeAdd">Close</button>
-    </section>
     <section>
       <div class="sectionhead">
         <h2 class="section-title" id="listTitle">Your sets</h2>
@@ -760,26 +762,39 @@ view.addEventListener('error', (e) => {
 }, true);
 
 view.addEventListener('click', (e) => {
-  if (e.target.closest('#showAdd, #addTile')) {
-    const p = $('#addPanel');
-    if (!p) return;
-    p.hidden = false;
-    p.scrollIntoView({ block: 'start', behavior: 'smooth' });
-    $('#nums')?.focus({ preventScroll: true });
-  } else if (e.target.closest('#closeAdd')) {
-    if (adding) { toast('Still adding. One moment.'); return; }
-    $('#addPanel').hidden = true;
-    $('#addLog').innerHTML = '';
-  }
+  if (e.target.closest('#showAdd, #addTile')) showAddDialog();
 });
 
-view.addEventListener('submit', (e) => {
-  if (e.target.id === 'addForm') {
+// "Add sets" in a pop-up. It stays open while sets download, so the progress lines stay visible.
+function showAddDialog() {
+  const done = openDialog(`
+    <h2>Add sets</h2>
+    <div id="addForm">
+      <label for="nums">Set numbers</label>
+      <div class="inline">
+        <input id="nums" name="nums" inputmode="text" autocapitalize="off" autocorrect="off" spellcheck="false" autocomplete="off" placeholder="e.g. 41395, 76396">
+        <button type="button" class="btn primary" id="addBtn">Add</button>
+      </div>
+    </div>
+    <p class="hint">Use commas or spaces to add several at once. Version -1 is assumed unless you type one, like 75192-2.</p>
+    <div id="addChoice" hidden></div>
+    <ul id="addLog" class="log" aria-live="polite"></ul>
+    <div class="row" style="justify-content:flex-end"><button class="btn" value="close" id="closeAdd" formnovalidate>Close</button></div>`);
+  const d = $('#dlg');
+  const run = () => { const input = $('#nums'); addSets(input.value).then(() => { if (!$('#addLog .err')) input.value = ''; }); };
+  $('#addBtn').addEventListener('click', run);
+  $('#nums').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); run(); } });
+  d.querySelector('form').addEventListener('submit', (e) => {
+    if (e.submitter?.id === 'closeAdd' && !adding) return; // Close
     e.preventDefault();
-    const input = $('#nums');
-    addSets(input.value).then(() => { if (!$('#addLog .err')) input.value = ''; });
-  }
-});
+    if (e.submitter?.id === 'closeAdd') toast('Still adding. One moment.');
+    else run();
+  });
+  d.oncancel = (e) => { if (adding) e.preventDefault(); }; // Escape / back while downloading
+  const away = () => { if (!adding && d.open) d.close(); };
+  window.addEventListener('hashchange', away);
+  done.then(() => { d.oncancel = null; window.removeEventListener('hashchange', away); });
+}
 
 window.addEventListener('hashchange', route);
 bins.ensureDefaultBins().catch(() => {}).then(route).then(() => {

@@ -154,7 +154,7 @@ async function renderSets() {
       <h2>Add your Rebrickable key first</h2>
       <p>The app needs your free API key to fetch parts lists. <a href="#/settings">Open Settings</a></p>
     </section>`}
-    <section class="panel">
+    <section class="panel" id="addPanel" hidden>
       <h2>Add sets</h2>
       <form id="addForm" autocomplete="off">
         <label for="nums">Set numbers</label>
@@ -165,9 +165,13 @@ async function renderSets() {
       </form>
       <p class="hint">Use commas or spaces to add several at once. Version -1 is assumed unless you type one, like 75192-2.</p>
       <ul id="addLog" class="log" aria-live="polite"></ul>
+      <button type="button" class="btn block" id="closeAdd">Close</button>
     </section>
     <section>
-      <h2 class="section-title" id="listTitle">Your sets</h2>
+      <div class="sectionhead">
+        <h2 class="section-title" id="listTitle">Your sets</h2>
+        <button type="button" class="chip addbin" id="showAdd" hidden>+ Add set</button>
+      </div>
       <div id="setList"></div>
     </section>`;
   await refreshSetList();
@@ -181,8 +185,10 @@ async function refreshSetList() {
   const activeBy = new Map((await bins.loadContext()).active.map((a) => [a.set.set_num, a]));
   if (!el.isConnected || !$('#listTitle')) return; // the screen changed while we were loading
   $('#listTitle').textContent = sets.length ? `Your sets (${sets.length})` : 'Your sets';
+  $('#showAdd').hidden = !sets.length;
+  const addTile = '<button type="button" class="addsettile" id="addTile">+ Add set</button>';
   if (!sets.length) {
-    el.innerHTML = '<p class="empty">No sets yet. Add a set number above to get started.</p>';
+    el.innerHTML = addTile;
     return;
   }
   el.innerHTML = `<ul class="cards">${sets.map((s) => `
@@ -196,7 +202,7 @@ async function refreshSetList() {
         </div>
         <span class="chev" aria-hidden="true">›</span>
       </a>
-    </li>`).join('')}</ul>`;
+    </li>`).join('')}</ul>${addTile}`;
 }
 
 function parseTokens(text) {
@@ -752,6 +758,20 @@ document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeMenu(
 view.addEventListener('error', (e) => {
   if (e.target.tagName === 'IMG') e.target.style.visibility = 'hidden';
 }, true);
+
+view.addEventListener('click', (e) => {
+  if (e.target.closest('#showAdd, #addTile')) {
+    const p = $('#addPanel');
+    if (!p) return;
+    p.hidden = false;
+    p.scrollIntoView({ block: 'start', behavior: 'smooth' });
+    $('#nums')?.focus({ preventScroll: true });
+  } else if (e.target.closest('#closeAdd')) {
+    if (adding) { toast('Still adding. One moment.'); return; }
+    $('#addPanel').hidden = true;
+    $('#addLog').innerHTML = '';
+  }
+});
 
 view.addEventListener('submit', (e) => {
   if (e.target.id === 'addForm') {

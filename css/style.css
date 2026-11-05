@@ -613,3 +613,8 @@ dialog .colorbtn { width: 100%; }
 .sectionhead { margin-bottom: 14px; }
 
 .chip.searchall { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; box-sizing: border-box; text-decoration: none; margin-bottom: 4px; }
+
+/* sets page: dashed "+ Add set" tile */
+.addsettile { display: block; width: 100%; box-sizing: border-box; margin-top: 12px; padding: 20px; border: 2px dashed #b9b2aa; border-radius: 14px; background: transparent; color: var(--muted); font: inherit; font-weight: 700; text-align: center; cursor: pointer; }
+.addsettile:active { background: rgba(0,0,0,.04); }
+#addPanel .btn.block { margin-top: 12px; }

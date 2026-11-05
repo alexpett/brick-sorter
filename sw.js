@@ -1,5 +1,5 @@
 // Caches the app shell so Brick Sorter opens offline. Rebrickable calls are never cached here.
-const CACHE = 'brick-sorter-v47';
+const CACHE = 'brick-sorter-v48';
 const SHELL = [
   './',
   'index.html',
@@ -27,7 +27,7 @@ const SHELL = [
 ];
 
 self.addEventListener('install', (event) => {
-  event.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));
+  event.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL.map((u) => new Request(u, { cache: 'reload' })))).then(() => self.skipWaiting()));
 });
 
 self.addEventListener('activate', (event) => {
@@ -44,7 +44,7 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
   if (event.request.method !== 'GET' || url.origin !== self.location.origin) return;
   event.respondWith(
-    fetch(event.request)
+    fetch(event.request, { cache: 'no-cache' }) // always check with the server, never the browser's own copy
       .then((res) => {
         if (res.ok) {
           const copy = res.clone();

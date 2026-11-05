@@ -26,7 +26,8 @@ export async function renderBins() {
   const count = (id) => partCount(ctx.byBin.get(id) || []);
   const wm = bins.wantedMap(ctx);
   const wantedLines = (id) => (ctx.byBin.get(id) || []).filter((l) => l.part_num && wm.has(`${l.part_num}|${l.color_id}`)).length;
-  const storage = ctx.bins.filter((b) => b.type === 'storage').sort((a, b) => (a.order || 0) - (b.order || 0));
+  // Fullest first; equal counts keep their usual order.
+  const storage = ctx.bins.filter((b) => b.type === 'storage').sort((a, b) => count(b.id) - count(a.id) || (a.order || 0) - (b.order || 0));
 
   const activeHtml = ctx.active.length
     ? `<ul class="cards">${ctx.active.map((a) => {

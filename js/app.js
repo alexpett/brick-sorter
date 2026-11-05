@@ -169,6 +169,8 @@ async function renderSets() {
       <h2>Add your Rebrickable key first</h2>
       <p>The app needs your free API key to fetch parts lists. <a href="#/settings">Open Settings</a></p>
     </section>`}
+    <button type="button" class="chip addbin searchall" id="findSets" hidden><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.5 15.5L21 21"/></svg> Search sets</button>
+    <p class="hint filterline" id="filterLine" hidden></p>
     <section>
       <div class="sectionhead">
         <h2 class="section-title" id="listTitle">Your sets</h2>
@@ -179,18 +181,68 @@ async function renderSets() {
   await refreshSetList();
 }
 
+// Search and filter on the Sets page (kept while you move around the app).
+let setQuery = '';
+const setStates = new Set(); // 'pieces' | 'building' | 'complete'; empty means all
+const STATE_LABEL = { pieces: 'In pieces', building: 'Building', complete: 'Complete' };
+
+function setState(a) {
+  if (!a) return 'pieces';
+  return a.neededTotal > 0 && a.heldTotal >= a.neededTotal ? 'complete' : 'building';
+}
+
+async function findSetsDialog() {
+  const { value, data } = await openDialog(`
+    <h2>Search sets</h2>
+    <label for="sq">Name or set number</label>
+    <input id="sq" name="q" type="search" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="e.g. castle, 41395" value="${esc(setQuery)}">
+    <label>State</label>
+    <div class="statechips">${Object.entries(STATE_LABEL).map(([k, v]) => `
+      <label class="statechip"><input type="checkbox" name="state" value="${k}"${setStates.has(k) ? ' checked' : ''}><span>${v}</span></label>`).join('')}
+    </div>
+    <p class="hint">Leave all three unticked to see every set.</p>
+    <div class="row spread">
+      <button class="btn" value="clear" formnovalidate>Clear</button>
+      <button class="btn primary" value="apply">Show sets</button>
+    </div>`, { data: true });
+  if (value === 'clear') { setQuery = ''; setStates.clear(); }
+  else if (value === 'apply') {
+    setQuery = String(data.get('q') || '').trim();
+    setStates.clear();
+    for (const v of data.getAll('state')) setStates.add(v);
+  } else return;
+  await refreshSetList();
+}
+
 async function refreshSetList() {
   const el = $('#setList');
   if (!el) return;
-  const sets = (await db.all('sets')).filter((s) => !s.deleted)
+  const all = (await db.all('sets')).filter((s) => !s.deleted)
     .sort((a, b) => a.set_num.localeCompare(b.set_num, undefined, { numeric: true }));
   const activeBy = new Map((await bins.loadContext()).active.map((a) => [a.set.set_num, a]));
   if (!el.isConnected || !$('#listTitle')) return; // the screen changed while we were loading
-  $('#listTitle').textContent = sets.length ? `Your sets (${sets.length})` : 'Your sets';
-  $('#showAdd').hidden = !sets.length;
+  const words = setQuery.toLowerCase().split(/\s+/).filter(Boolean);
+  const filtering = words.length > 0 || setStates.size > 0;
+  const sets = all.filter((s) => {
+    const hay = `${decode(s.name || '')} ${s.set_num}`.toLowerCase();
+    return words.every((w) => hay.includes(w)) && (!setStates.size || setStates.has(setState(activeBy.get(s.set_num))));
+  });
+  $('#listTitle').textContent = all.length ? (filtering ? `Your sets (${sets.length} of ${all.length})` : `Your sets (${all.length})`) : 'Your sets';
+  $('#showAdd').hidden = !all.length;
+  $('#findSets').hidden = !all.length;
+  const line = $('#filterLine');
+  line.hidden = !filtering || !all.length;
+  if (!line.hidden) {
+    const parts = [...(words.length ? [`“${esc(setQuery)}”`] : []), ...[...setStates].map((k) => STATE_LABEL[k])];
+    line.innerHTML = `Showing ${parts.join(' · ')} <button type="button" class="linkbtn" id="clearFind">Clear</button>`;
+  }
   const addTile = '<button type="button" class="addsettile" id="addTile">+ Add set</button>';
-  if (!sets.length) {
+  if (!all.length) {
     el.innerHTML = addTile;
+    return;
+  }
+  if (!sets.length) {
+    el.innerHTML = `<p class="empty">No sets match. <button type="button" class="linkbtn" id="clearFind2">Clear the search</button></p>${addTile}`;
     return;
   }
   el.innerHTML = `<ul class="cards">${sets.map((s) => `
@@ -761,8 +813,10 @@ view.addEventListener('error', (e) => {
   if (e.target.tagName === 'IMG') e.target.style.visibility = 'hidden';
 }, true);
 
-view.addEventListener('click', (e) => {
+view.addEventListener('click', async (e) => {
   if (e.target.closest('#showAdd, #addTile')) showAddDialog();
+  else if (e.target.closest('#findSets')) await findSetsDialog();
+  else if (e.target.closest('#clearFind, #clearFind2')) { setQuery = ''; setStates.clear(); await refreshSetList(); }
 });
 
 // "Add sets" in a pop-up. It stays open while sets download, so the progress lines stay visible.

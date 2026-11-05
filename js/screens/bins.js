@@ -48,7 +48,7 @@ export async function renderBins() {
     : '<p class="empty">No active bins yet. Open a set and choose “Start rebuilding this set”.</p>';
 
   view.innerHTML = `
-    <a class="btn block searchall" href="#/bin/all">Search all pieces</a>
+    <a class="chip addbin searchall" href="#/bin/all"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.5 15.5L21 21"/></svg> Search all pieces</a>
     <section>
       <h2 class="section-title">Active bins</h2>
       ${activeHtml}

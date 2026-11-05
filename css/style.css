@@ -611,3 +611,5 @@ dialog .colorbtn { width: 100%; }
 #undoPill.show { opacity: 1; transform: none; pointer-events: auto; transition: opacity .15s, transform .25s; }
 .searchall { margin-bottom: 4px; }
 .sectionhead { margin-bottom: 14px; }
+
+.chip.searchall { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; box-sizing: border-box; text-decoration: none; margin-bottom: 4px; }

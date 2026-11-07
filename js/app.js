@@ -1,6 +1,8 @@
 import * as db from './db.js';
 import * as rb from './rebrickable.js';
 import * as refdata from './data.js';
+import * as swatchLib from './swatch.js';
+import { pickColor, refreshInfo as refreshSorterInfo } from './screens/sorter.js';
 import * as bins from './bins.js';
 import * as sync from './sync.js';
 import { $, view, esc, decode, fmt, safeRgb, setTitle, toast, openDialog, ask } from './ui.js';
@@ -586,6 +588,12 @@ async function renderSettings() {
       <p class="hint">Sets, bins and sorted pieces are backed up. Parts lists are fetched again from Rebrickable on a new device. Your Rebrickable key is never sent to the sheet.</p>
     </section>
     <section class="panel">
+      <h2>Colour Swatch</h2>
+      <label class="check"><input type="checkbox" id="swatchFirst"> Open the Colour Wall on the Swatch</label>
+      <p class="hint">When logging a piece, the Colour Wall shows your colour plate first instead of Recent colours.</p>
+      <button type="button" class="btn block" id="editSwatch">Edit the Swatch</button>
+    </section>
+    <section class="panel">
       <h2>Minifigures</h2>
       <label class="check"><input type="checkbox" id="includeFigs"> Include minifigure parts in sets</label>
       <p class="hint">Adds each set's minifigure heads, torsos, legs and accessories to its parts list. Adding a set takes longer.</p>
@@ -648,6 +656,9 @@ async function renderSettings() {
   });
 
   await setupSyncPanel();
+  $('#swatchFirst').checked = await swatchLib.swatchOpensFirst();
+  $('#swatchFirst').addEventListener('change', async (e) => { await db.setSetting('swatchDefault', e.target.checked); });
+  $('#editSwatch').addEventListener('click', editSwatch);
   $('#includeFigs').checked = await includeFigs();
   $('#includeFigs').addEventListener('change', async (e) => { await db.setSetting('includeFigs', e.target.checked); await paintFigsNote(); });
   $('#addFigsAll').addEventListener('click', addFigsToAllSets);
@@ -715,6 +726,39 @@ async function restoreMissingParts() {
     restoring = false;
   }
   return done;
+}
+
+// Lay out the Swatch to match the physical plate. Tap a square to choose its colour; nothing is saved until Save.
+async function editSwatch() {
+  await refdata.loadRef();
+  const cells = await swatchLib.getSwatch();
+  for (;;) {
+    const { value, data } = await openDialog(`
+      <h2>Edit the Swatch</h2>
+      <p class="hint">Match your plate, left to right, top to bottom. Tap a square to choose its colour.</p>
+      ${swatchLib.swatchGrid(cells, { byCell: true })}
+      <div class="row spread" style="margin-top:14px">
+        <button class="btn" value="reset" formnovalidate>Reset</button>
+        <span class="grow"></span>
+        <button class="btn" value="cancel" formnovalidate>Cancel</button>
+        <button class="btn primary" value="save" formnovalidate>Save</button>
+      </div>`, { data: true });
+    if (value === 'reset') { cells.splice(0, cells.length, ...swatchLib.DEFAULT_SWATCH); continue; }
+    if (value === 'save') {
+      await swatchLib.setSwatch(cells);
+      await refreshSorterInfo();
+      toast('Swatch saved.');
+      return;
+    }
+    const i = data?.get('cell');
+    if (value !== '' && value !== null && value !== 'cancel' && /^\d+$/.test(String(value))) {
+      const r = await pickColor(cells[Number(value)], { allOnly: true, clearLabel: 'Empty square', title: 'Colour for this square' });
+      if (r === 'clear') cells[Number(value)] = null;
+      else if (r !== null) cells[Number(value)] = r;
+      continue;
+    }
+    return;
+  }
 }
 
 const setsWithoutFigs = async () => (await db.all('sets')).filter((x) => !x.deleted && !x.figs_at);

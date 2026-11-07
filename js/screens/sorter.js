@@ -2,6 +2,7 @@
 // and the bin buttons. Tapping a bin saves the piece there.
 import * as db from '../db.js';
 import * as refdata from '../data.js';
+import * as swatchLib from '../swatch.js';
 import * as bins from '../bins.js';
 import { $, esc, fmt, toast, notify, openDialog } from '../ui.js';
 import { celebrate } from '../rewards.js';
@@ -35,6 +36,8 @@ function dominantColour(list) {
 
 export async function refreshInfo() {
   info.ctx = await bins.loadContext();
+  info.swatch = await swatchLib.getSwatch();
+  info.swatchFirst = await swatchLib.swatchOpensFirst();
   info.yours = new Set();
   info.imgByPart = new Map();
   const colors = new Map();
@@ -114,11 +117,12 @@ async function chooseColor(id) {
 //  multi     - an array of colour ids already chosen: tapping toggles, Done returns the whole list
 //  clearLabel- adds a button that resolves 'clear' (e.g. "Show all colours")
 // Resolves a colour id, an array (multi), 'clear', or null if cancelled.
-export function pickColor(current = colorId, { allOnly = false, only = null, multi = null, clearLabel = '', title = 'Colour Wall' } = {}) {
+export function pickColor(current = colorId, { allOnly = false, only = null, multi = null, clearLabel = '', title = 'Colour Wall', swatch = false } = {}) {
+  swatch = swatch && !allOnly && !only && !multi; // the Swatch is for logging a piece, nothing else
   allOnly = allOnly || !!only || !!multi;
   return new Promise((resolve) => {
     const d = $('#dlg');
-    let tab = allOnly ? 'all' : recent.length ? 'recent' : 'yours';
+    let tab = allOnly ? 'all' : swatch && info.swatchFirst ? 'swatch' : recent.length ? 'recent' : 'yours';
     let filter = '';
     let open = null; // the one group that is expanded (none to start with)
     d.innerHTML = `<form method="dialog">
@@ -126,7 +130,7 @@ export function pickColor(current = colorId, { allOnly = false, only = null, mul
       <div class="segmented" id="cpTabs" role="tablist"></div>
       <input id="cfilter" type="search" placeholder="Filter colours" autocomplete="off" spellcheck="false" hidden>
       <div id="cgrid"></div>
-      <div class="row">${clearLabel ? `<button class="btn" value="clear" formnovalidate>${esc(clearLabel)}</button>` : ''}<span class="grow"></span><button class="btn" value="cancel" formnovalidate>Cancel</button>${multi ? '<button class="btn primary" value="done" formnovalidate>Done</button>' : ''}</div>
+      <div class="row">${swatch ? '<button type="button" class="btn swatchbtn" id="swatchBtn"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><rect x="3" y="3" width="8" height="8" rx="2" fill="currentColor"/><rect x="13" y="3" width="8" height="8" rx="2" fill="currentColor" opacity=".55"/><rect x="3" y="13" width="8" height="8" rx="2" fill="currentColor" opacity=".55"/><rect x="13" y="13" width="8" height="8" rx="2" fill="currentColor"/></svg> Swatch</button>' : ''}${clearLabel ? `<button class="btn" value="clear" formnovalidate>${esc(clearLabel)}</button>` : ''}<span class="grow"></span><button class="btn" value="cancel" formnovalidate>Cancel</button>${multi ? '<button class="btn primary" value="done" formnovalidate>Done</button>' : ''}</div>
     </form>`;
     const picked = new Set(multi || []);
     const every = () => (only ? [...only.keys()].map(colorOf).filter(Boolean) : refdata.pickerColors());
@@ -141,7 +145,13 @@ export function pickColor(current = colorId, { allOnly = false, only = null, mul
       d.querySelector('#cpTabs').hidden = allOnly;
       if (!allOnly) d.querySelector('#cpTabs').innerHTML = [['recent', `Recent (${recent.length})`], ['yours', `Your colours (${yours.length})`], ['all', 'All']]
         .map(([id, label]) => `<button type="button" role="tab" data-tab="${id}" aria-selected="${tab === id}">${esc(label)}</button>`).join('');
-      d.querySelector('#cfilter').hidden = tab === 'recent';
+      const sb = d.querySelector('#swatchBtn');
+      if (sb) sb.setAttribute('aria-pressed', String(tab === 'swatch'));
+      d.querySelector('#cfilter').hidden = tab === 'recent' || tab === 'swatch';
+      if (tab === 'swatch') {
+        d.querySelector('#cgrid').innerHTML = `${swatchLib.swatchGrid(info.swatch, { current })}<p class="swname" id="swName" aria-live="polite">Press and hold a square to see its colour name.</p>`;
+        return;
+      }
       const needle = filter.trim().toLowerCase();
       const match = (c) => !needle || c.name.toLowerCase().includes(needle);
       const box = d.querySelector('#cgrid');
@@ -169,7 +179,23 @@ export function pickColor(current = colorId, { allOnly = false, only = null, mul
         </section>`;
       }).join('')}</div>`;
     };
+    let pressTimer = null;
+    let held = false; // a long press just showed a name: the lift of the finger must not also pick
+    const swName = (c) => { const el = d.querySelector('#swName'); if (el) el.textContent = c ? c.name : ''; };
+    d.onpointerdown = (e) => {
+      const cell = e.target.closest('[data-swcolor]');
+      if (!cell) return;
+      held = false;
+      clearTimeout(pressTimer);
+      pressTimer = setTimeout(() => { held = true; swName(colorOf(Number(cell.dataset.swcolor))); navigator.vibrate?.(15); }, 450);
+    };
+    const endPress = () => clearTimeout(pressTimer);
+    d.onpointerup = endPress; d.onpointercancel = endPress; d.onpointerleave = endPress;
+    d.oncontextmenu = (e) => { if (e.target.closest('.swcell')) e.preventDefault(); };
     d.onclick = (e) => {
+      const sw = e.target.closest('[data-swcolor]');
+      if (sw) { if (held) { held = false; return; } d.close(sw.dataset.swcolor); return; }
+      if (e.target.closest('#swatchBtn')) { tab = 'swatch'; filter = ''; draw(); return; }
       const t = e.target.closest('[data-tab],[data-color],[data-group]');
       if (!t) return;
       if (t.dataset.group) {
@@ -199,7 +225,8 @@ export function pickColor(current = colorId, { allOnly = false, only = null, mul
     d.oninput = (e) => { if (e.target.id === 'cfilter') { filter = e.target.value; draw(); } };
     d.onkeydown = (e) => { if (e.key === 'Enter' && e.target.id === 'cfilter') e.preventDefault(); };
     d.onclose = () => {
-      d.onclick = null; d.oninput = null; d.onkeydown = null;
+      clearTimeout(pressTimer);
+      d.onclick = null; d.oninput = null; d.onkeydown = null; d.onpointerdown = null; d.onpointerup = null; d.onpointercancel = null; d.onpointerleave = null; d.oncontextmenu = null;
       const v = d.returnValue;
       if (v === 'done') resolve([...picked]);
       else if (v === 'clear') resolve('clear');
@@ -531,7 +558,7 @@ export function createSorter(el, { onSaved, onChangePart, onUndo } = {}) {
       case 'showSug': st.sugOpen = true; renderTop(); break;
       case 'changePart': st.part = null; renderTop(); onChangePart?.(); break;
       case 'colorBtn': {
-        const id = await pickColor();
+        const id = await pickColor(undefined, { swatch: true });
         if (id !== null) { st.sugOpen = false; await chooseColor(id); renderTop(); }
         break;
       }

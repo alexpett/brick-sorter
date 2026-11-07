@@ -630,3 +630,17 @@ dialog .colorbtn { width: 100%; }
 .chip[hidden], .filterline[hidden] { display: none !important; }
 label.check { display: flex; align-items: center; gap: 10px; margin: 6px 0; font-weight: 600; }
 label.check input { width: 22px; height: 22px; }
+
+/* Swatch: the colour plate as a grid of 1 x 1 plates seen from above */
+.swgrid { display: grid; grid-template-columns: repeat(8, 1fr); gap: 6px; padding: 10px; border-radius: 14px; background: #d9d4cc; }
+.swcell { position: relative; aspect-ratio: 1; border: 0; padding: 0; border-radius: 9px; background: var(--c, transparent); cursor: pointer; display: block; -webkit-touch-callout: none; user-select: none; -webkit-user-select: none; touch-action: manipulation; box-shadow: inset 0 0 0 1px rgba(0,0,0,.12); }
+.swcell.trans { background: color-mix(in srgb, var(--c) 78%, #fff); }
+.swstud { position: absolute; inset: 24%; border-radius: 50%; border: 2px solid rgba(0,0,0,.22); background: radial-gradient(circle at 32% 30%, rgba(255,255,255,.5), rgba(255,255,255,0) 55%); box-shadow: 0 1px 0 rgba(255,255,255,.25); }
+.swcell:active { transform: scale(.94); }
+.swcell[aria-pressed="true"] { outline: 3px solid var(--accent); outline-offset: 1px; }
+.swcell.empty { background: transparent; border: 2px dashed #b9b2aa; box-shadow: none; opacity: .5; cursor: default; }
+.swcell.empty .swstud { border-color: rgba(0,0,0,.12); background: none; box-shadow: none; }
+button.swcell.empty { cursor: pointer; opacity: .7; }
+.swname { min-height: 1.4em; margin: 10px 0 0; text-align: center; color: var(--muted); font-size: .9rem; }
+.swatchbtn { display: inline-flex; align-items: center; gap: 8px; }
+.swatchbtn[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); }

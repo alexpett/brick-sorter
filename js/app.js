@@ -403,7 +403,7 @@ async function renderSet(setNum) {
         <p class="cardmeta">${esc(rec.set_num)} · ${esc(rec.year)}</p>
         <p class="stats"><strong>${fmt(rec.pieces)}</strong> pieces · <strong>${fmt(rec.line_count)}</strong> part types${
           rec.sticker_lines ? ` · <strong>${fmt(rec.sticker_lines)}</strong> sticker` : ''}</p>
-        <p class="hint">${rec.spares ? `${fmt(rec.spares)} spare pieces are not counted. ` : ''}Minifigures are not included.</p>
+        <p class="hint">${rec.spares ? `${fmt(rec.spares)} spare pieces are not counted. ` : ''}${rec.figs_at ? 'Minifigure parts are included.' : 'Minifigure parts are not included.'}</p>
       </div>
     </section>
     <section class="panel" id="binPanel"></section>

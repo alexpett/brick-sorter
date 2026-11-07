@@ -658,3 +658,7 @@ button.swcell.empty { cursor: pointer; opacity: .7; }
 label.camchip { cursor: pointer; }
 .viewer-msg { font-size: .95rem; }
 #scanRoot #q { margin-bottom: 8px; }
+.shutterrow { display: grid; grid-template-columns: 1fr auto 1fr; }
+.shutterrow .camchip { width: 56px; padding: 0; }
+.shutterrow > :first-child { justify-self: start; }
+.shutterrow > :last-child { justify-self: end; }

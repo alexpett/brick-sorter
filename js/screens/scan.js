@@ -45,7 +45,7 @@ export async function renderScan() {
           <label class="chip addbin camchip" for="filePick" role="button" aria-label="Upload a photo"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 16V4M7 9l5-5 5 5M4 15v4a1 1 0 001 1h14a1 1 0 001-1v-4"/></svg></label>
           <input type="file" id="filePick" accept="image/*" capture="environment" hidden>
           <button type="button" class="shutter" id="shutter" aria-label="Start the camera"><span></span></button>
-          <button type="button" class="chip addbin camchip" id="descBtn"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h10"/></svg>Description</button>
+          <button type="button" class="chip addbin camchip" id="descBtn" aria-label="Search by description"><svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg></button>
         </div>
       </section>
       <section class="panel" id="matches"></section>

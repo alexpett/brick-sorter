@@ -477,8 +477,12 @@ export async function renameStorageBin(binId, label) {
 export async function deleteStorageBin(binId) {
   const bin = await db.get('bins', binId);
   if (!bin || bin.type !== 'storage' || bin.locked) throw new Error('That bin cannot be deleted.');
-  if ((await binLines(binId)).length) throw new Error('Empty the bin before deleting it.');
-  await db.put('bins', { ...bin, deleted: true, updated: nowIso() });
+  const now = nowIso();
+  const lines = await binLines(binId);
+  // The bricks go with the bin (marked removed, never hard-deleted).
+  await db.putMany('inventory', lines.map((l) => ({ ...l, deleted: true, updated: now })));
+  await db.put('bins', { ...bin, deleted: true, updated: now });
+  return { bricks: sumQty(lines) };
 }
 
 // How much of a set’s parts list is already sitting in storage bins (for the pick list).

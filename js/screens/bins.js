@@ -543,10 +543,15 @@ export async function renderBin(id, keepMode = false) {
     await renderBin(id, true);
   };
   $('#delBin')?.addEventListener('click', async () => {
-    if (!(await ask({ title: 'Remove this bin?', body: `${bin.label} will be removed. Its bricks stay in the app. Any storage rules that point to it will ask again next time.`, ok: 'Remove', danger: true }))) return;
+    const n = partCount(lines);
+    const body = n
+      ? `${bin.label} and the ${fmt(n)} ${n === 1 ? 'brick' : 'bricks'} in it will be removed from the app. This can’t be undone. Any storage rules that point to it will ask again next time.`
+      : `${bin.label} is empty and will be removed. Any storage rules that point to it will ask again next time.`;
+    if (!(await ask({ title: `Remove ${bin.label}?`, body, ok: 'Remove', danger: true }))) return;
     try {
-      await bins.deleteStorageBin(bin.id);
+      const res = await bins.deleteStorageBin(bin.id);
       location.hash = '#/bins';
+      toast(res.bricks ? `Removed ${bin.label} and ${fmt(res.bricks)} ${res.bricks === 1 ? 'brick' : 'bricks'}.` : `Removed ${bin.label}.`);
     } catch (err) { toast(err.message); }
   });
   void title;

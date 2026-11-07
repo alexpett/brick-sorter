@@ -124,7 +124,9 @@ export function pickColor(current = colorId, { allOnly = false, only = null, mul
     const d = $('#dlg');
     let tab = allOnly ? 'all' : swatch && info.swatchFirst ? 'swatch' : recent.length ? 'recent' : 'yours';
     let filter = '';
-    let open = null; // the one group that is expanded (none to start with)
+    let open = null; // the one group that is expanded (the current colour's, if there is one)
+    const cur0 = Number.isInteger(current) ? refdata.ref.colorById.get(current) : null;
+    if (allOnly && cur0) open = refdata.colorGroup(cur0);
     d.innerHTML = `<form method="dialog">
       <h2>${esc(title)}</h2>
       <div class="segmented" id="cpTabs" role="tablist"></div>
@@ -235,6 +237,7 @@ export function pickColor(current = colorId, { allOnly = false, only = null, mul
     d.returnValue = '';
     draw();
     d.showModal();
+    d.querySelector('.cswatch[aria-pressed="true"]')?.scrollIntoView({ block: 'center' });
     d.setAttribute('tabindex', '-1');
     d.focus({ preventScroll: true });
   });

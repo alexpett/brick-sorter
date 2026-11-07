@@ -107,8 +107,8 @@ function drawSearch() {
   const m = $r('#matches');
   m.hidden = false;
   m.innerHTML = `
-    <label for="q" class="sr">Search parts</label>
-    <input id="q" type="search" placeholder="Part number or words, e.g. 3001 or plate 2 x 4" autocomplete="off" autocapitalize="off" spellcheck="false">
+    <h2><label for="q">Describe your piece</label></h2>
+    <input id="q" type="search" placeholder="e.g. brick, plate, tile etc" autocomplete="off" autocapitalize="off" spellcheck="false">
     <div id="results" aria-live="polite"></div>
     <button class="btn block" id="unrec" type="button">I can’t identify this piece</button>`;
   $r('#q').value = query;

@@ -662,3 +662,4 @@ label.camchip { cursor: pointer; }
 .shutterrow .camchip { width: 56px; padding: 0; }
 .shutterrow > :first-child { justify-self: start; }
 .shutterrow > :last-child { justify-self: end; }
+#scanRoot #matches h2 label { font: inherit; }

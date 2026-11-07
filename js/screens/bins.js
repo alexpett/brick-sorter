@@ -6,7 +6,7 @@ import { view, esc, fmt, toast, openDialog, ask, setTitle, safeRgb, stepperHtml 
 import { orderDialog } from '../order.js';
 import { BRICK_ICON, placeholderColour } from '../setpic.js';
 import { celebrate } from '../rewards.js';
-import { pickColor, refreshInfo, loadColorState } from './sorter.js';
+import { pickColor, refreshInfo, loadColorState, offerUndo } from './sorter.js';
 
 const partCount = (lines) => bins.sumQty(lines);
 const pl = (n, one, many) => `${fmt(n)} ${n === 1 ? one : many}`;
@@ -158,13 +158,20 @@ export async function drawRules() {
 
 let binMode = 'missing'; // 'missing' | 'found' for active bins
 const pickOpen = new Set(); // storage bins expanded in the pick list
+// Which storage bins were open is remembered for each bin page, on this device.
+const pickKey = (binId) => `brick-sorter.pickOpen.${binId}`;
+function loadPickOpen(binId) {
+  pickOpen.clear();
+  try { for (const k of JSON.parse(localStorage.getItem(pickKey(binId)) || '[]')) pickOpen.add(k); } catch { /* memory is optional */ }
+}
+function savePickOpen(binId) { try { localStorage.setItem(pickKey(binId), JSON.stringify([...pickOpen])); } catch { /* memory is optional */ } }
 let pickOnly = false; // missing list: only bricks that are sitting in storage
 let colorFilter = null; // colour id chosen with the Colour Wall (bin view)
 let offOnly = false; // storage bin: only lines outside the bin’s colour rule
 let neededOnly = false; // storage bin: only lines an active set still wants
 
 export async function renderBin(id, keepMode = false) {
-  if (!keepMode) { binMode = 'missing'; pickOnly = false; pickOpen.clear(); colorFilter = null; neededOnly = false; offOnly = false; }
+  if (!keepMode) { binMode = 'missing'; pickOnly = false; loadPickOpen(id); colorFilter = null; neededOnly = false; offOnly = false; }
   const ctx = await bins.loadContext();
   const isAll = id === 'all';
   const bin = isAll ? null : ctx.bins.find((b) => b.id === id);
@@ -373,7 +380,7 @@ export async function renderBin(id, keepMode = false) {
           for (const g of perBin.values()) { if (!groups.has(g.bin.id)) groups.set(g.bin.id, { bin: g.bin, items: [] }); groups.get(g.bin.id).items.push([l, g]); }
         }
         const sorted = [...groups.values()].sort((x, y) => (order.get(x.bin.id)?.[0] ?? 0) - (order.get(y.bin.id)?.[0] ?? 0) || String(x.bin.label).localeCompare(String(y.bin.label)));
-        listEl.innerHTML = sorted.map((g) => `<button type="button" class="card binrow pickgroup" data-pg="${esc(g.bin.id)}" aria-expanded="${pickOpen.has(g.bin.id)}"><div class="cardtext"><div class="cardname">${esc(g.bin.label)}</div><div class="cardmeta">${pl(g.items.length, 'part', 'parts')} to pick</div></div><span class="pgcaret" aria-hidden="true">›</span><span class="binchip store big"${bins.chipStyle(g.bin)}>${esc(bins.binShort(g.bin))}</span></button><ul class="parts"${pickOpen.has(g.bin.id) ? '' : ' hidden'}>${g.items.map(([l, f]) => rowHtml(l, f)).join('')}</ul>`).join('');
+        listEl.innerHTML = sorted.map((g) => `<button type="button" class="card binrow pickgroup" data-pg="${esc(g.bin.id)}" aria-expanded="${pickOpen.has(g.bin.id)}"><div class="cardtext"><div class="cardname">${esc(g.bin.label)}</div><div class="cardmeta">${pl(g.items.reduce((n, [l, f]) => n + Math.min(l.rem, f.qty), 0), 'brick', 'bricks')} to pick</div></div><span class="pgcaret" aria-hidden="true">›</span><span class="binchip store big"${bins.chipStyle(g.bin)}>${esc(bins.binShort(g.bin))}</span></button><ul class="parts"${pickOpen.has(g.bin.id) ? '' : ' hidden'}><li class="takeallrow"><button type="button" class="btn small lozenge redout" data-takeall="${esc(g.bin.id)}">Take all ${fmt(g.items.reduce((n, [l, f]) => n + Math.min(l.rem, f.qty), 0))} from ${esc(g.bin.label)}</button></li>${g.items.map(([l, f]) => rowHtml(l, f)).join('')}</ul>`).join('');
         return;
       }
       listEl.innerHTML = `<ul class="parts">${shown.map((l) => rowHtml(l)).join('')}</ul>`;
@@ -447,7 +454,7 @@ export async function renderBin(id, keepMode = false) {
   });
   $('#bulkRow').addEventListener('click', async (e) => {
     if (!e.target.closest('#bulkMove')) return;
-    if (await bulkMoveDialog(bulkShown, ctx, bin)) await renderBin(id, true);
+    await withUndo('the move', () => bulkMoveDialog(bulkShown, ctx, bin));
   });
   $('#filter').addEventListener('input', (e) => draw(e.target.value));
   view.querySelector('.segmented')?.addEventListener('click', (e) => {
@@ -459,6 +466,14 @@ export async function renderBin(id, keepMode = false) {
   $('#offToggle')?.addEventListener('click', () => { offOnly = !offOnly; renderBin(id, true); });
   $('#neededToggle')?.addEventListener('click', () => { neededOnly = !neededOnly; renderBin(id, true); });
   $('#pickToggle')?.addEventListener('click', () => { pickOnly = !pickOnly; renderBin(id, true); });
+  // Runs an action; when it changed something, shows the Undo pill that puts everything back.
+  const withUndo = async (label, action) => {
+    const snap = await bins.snapshotAll();
+    if (!(await action())) return false;
+    await renderBin(id, true);
+    offerUndo(async () => { await bins.restoreSnapshot(snap); toast(`Undid: ${label}.`); await renderBin(id, true); }, `Undo: ${label}`);
+    return true;
+  };
   const clampQty = (inp) => { const max = Number(inp.max) || 1; inp.value = String(Math.max(1, Math.min(max, Math.floor(Number(inp.value)) || 1))); };
   listEl.addEventListener('change', (e) => { if (e.target.classList?.contains('pqty')) clampQty(e.target); });
   listEl.addEventListener('click', async (e) => {
@@ -468,32 +483,49 @@ export async function renderBin(id, keepMode = false) {
       pg.setAttribute('aria-expanded', String(open));
       pg.nextElementSibling.hidden = !open;
       if (open) pickOpen.add(pg.dataset.pg); else pickOpen.delete(pg.dataset.pg);
+      savePickOpen(id);
       return;
     }
     const st = e.target.closest('[data-step]');
     if (st) { const inp = st.parentElement.querySelector('.pqty'); inp.value = String((Number(inp.value) || 1) + Number(st.dataset.step)); clampQty(inp); return; }
+    const ta = e.target.closest('[data-takeall]');
+    if (ta) {
+      const fromId = ta.dataset.takeall;
+      const rows = missing.filter((l) => l.stock?.some((x) => x.bin.id === fromId));
+      await withUndo('taking everything from storage', async () => {
+        let moved = 0;
+        for (const l of rows) {
+          const have = l.stock.filter((x) => x.bin.id === fromId).reduce((m, x) => m + x.line.qty, 0);
+          const q = Math.min(l.rem, have);
+          if (q > 0 && await takeFromStorage(l, bin, fromId, q, true)) moved += q;
+        }
+        if (moved) toast(`Took ${fmt(moved)} ${moved === 1 ? 'brick' : 'bricks'} out of storage.`);
+        return moved > 0;
+      });
+      return;
+    }
     const tb = e.target.closest('[data-take]');
     if (tb) {
       const row = missing.find((l) => l.id === tb.dataset.take);
-      if (row && await takeFromStorage(row, bin, tb.dataset.from || null, tb.closest('li').querySelector('.pqty') ? Number(tb.closest('li').querySelector('.pqty').value) : null)) await renderBin(id, true);
+      if (row) await withUndo('taking from storage', () => takeFromStorage(row, bin, tb.dataset.from || null, tb.closest('li').querySelector('.pqty') ? Number(tb.closest('li').querySelector('.pqty').value) : null));
       return;
     }
     const fb = e.target.closest('[data-found]');
     if (fb) {
       const row = missing.find((l) => l.id === fb.dataset.found);
-      if (row && await markFound(row, bin, Number(fb.closest('li').querySelector('.pqty')?.value) || null)) { await renderBin(id, true); await celebrate(); }
+      if (row && await withUndo('found bricks', () => markFound(row, bin, Number(fb.closest('li').querySelector('.pqty')?.value) || null))) await celebrate();
       return;
     }
     const mv = e.target.closest('[data-move]');
     if (mv) {
       const ln = lines.find((l) => l.id === mv.dataset.move);
-      if (ln && await moveLineDialog(ln, ctx, wm)) { await renderBin(id, true); await celebrate(); }
+      if (ln && await withUndo('the move', () => moveLineDialog(ln, ctx, wm))) await celebrate();
       return;
     }
     const btn = e.target.closest('[data-line]');
     if (!btn) return;
     const line = lines.find((l) => l.id === btn.dataset.line);
-    if (line && await editLine(line, ctx)) await renderBin(id, true);
+    if (line) await withUndo('the change', () => editLine(line, ctx));
   });
 
   $('#binColor')?.addEventListener('click', async () => { await binColourDialog(bin); await renderBin(id, true); });
@@ -574,7 +606,7 @@ async function markFound(row, bin, fixedQty = null) {
 }
 
 // Moves bricks from storage bins into this active bin.
-async function takeFromStorage(row, bin, fromBin = null, fixedQty = null) {
+async function takeFromStorage(row, bin, fromBin = null, fixedQty = null, quiet = false) {
   const stock = fromBin ? row.stock.filter((x) => x.bin.id === fromBin) : row.stock;
   const avail = stock.reduce((n, x) => n + x.line.qty, 0);
   const max = Math.min(row.rem, avail);
@@ -611,7 +643,7 @@ async function takeFromStorage(row, bin, fromBin = null, fixedQty = null) {
     items: [{ binId: bin.id, qty }],
     log: false, // a move from storage isn’t new sorting
   });
-  toast(`Moved ${fmt(qty)} × ${row.name} to Bin ${bin.number}.`);
+  if (!quiet) toast(`Moved ${fmt(qty)} × ${row.name} to Bin ${bin.number}.`);
   return true;
 }
 

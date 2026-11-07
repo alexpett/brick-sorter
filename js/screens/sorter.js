@@ -251,18 +251,19 @@ export function hideUndo() {
   clearTimeout(undoTimer);
   if (undoEl) { undoEl.classList.remove('show'); undoEl.disabled = true; }
 }
-function offerUndo(fn) {
+export function offerUndo(fn, label = 'Undo last save') {
   clearTimeout(undoTimer);
   if (!undoEl) {
     undoEl = document.createElement('button');
     undoEl.type = 'button';
     undoEl.id = 'undoPill';
     undoEl.textContent = '↶';
-    undoEl.setAttribute('aria-label', 'Undo last save');
+    undoEl.setAttribute('aria-label', label);
     document.body.appendChild(undoEl);
     window.addEventListener('hashchange', hideUndo);
   }
   const btn = undoEl;
+  btn.setAttribute('aria-label', label);
   btn.onclick = async () => { hideUndo(); try { await fn(); } catch (e) { toast(e.message || 'Could not undo.'); } };
   btn.disabled = false;
   void btn.offsetWidth; // restart the fade

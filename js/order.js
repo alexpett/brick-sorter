@@ -23,13 +23,14 @@ export function orderItems(missing, { skipStorage }) {
 async function blIds(set, key) {
   const results = await rb.getSetParts(set.set_num, key);
   if (set.figs_at) { try { results.push(...await rb.getSetFigureParts(set.set_num, key)); } catch { /* the set’s own parts are enough */ } }
-  const parts = new Map(); const colours = new Map();
+  const parts = new Map(); const colours = new Map(); const multi = new Set();
   for (const r of results) {
     const p = r.part || {}; const c = r.color || {};
     const bp = p.external_ids?.BrickLink?.[0]; if (bp) parts.set(String(p.part_num), String(bp));
-    const bc = c.external_ids?.BrickLink?.ext_ids?.[0]; if (bc != null) colours.set(c.id, bc);
+    const bcs = c.external_ids?.BrickLink?.ext_ids || []; if (bcs[0] != null) colours.set(c.id, bcs[0]);
+    if (bcs.length > 1) multi.add(c.id);
   }
-  return { parts, colours };
+  return { parts, colours, multi };
 }
 
 export async function buildOrder(format, items, set, key) {
@@ -40,15 +41,17 @@ export async function buildOrder(format, items, set, key) {
   if (format === 'csv') {
     return { text: ['Set,Part,Name,Colour,Quantity', ...items.map((i) => [set.set_num, i.part_num, i.name, i.color_name, i.qty].map(csvCell).join(','))].join('\n') + '\n', unmatched: 0 };
   }
-  let ids = { parts: new Map(), colours: new Map() };
+  let ids = { parts: new Map(), colours: new Map(), multi: new Set() };
   if (key) ids = await blIds(set, key);
-  let unmatched = 0;
+  let unmatched = 0; const unlisted = new Set(); const multiNames = new Set();
   const rows = items.map((i) => {
     const part = ids.parts.get(String(i.part_num)); const colour = ids.colours.get(i.color_id);
     if (!part || colour == null) unmatched++;
+    if (key && !part) unlisted.add(i.part_num);
+    if (ids.multi.has(i.color_id)) multiNames.add(i.color_name);
     return `  <ITEM>\n    <ITEMTYPE>P</ITEMTYPE>\n    <ITEMID>${xml(part || i.part_num)}</ITEMID>\n    <COLOR>${xml(colour ?? i.color_id)}</COLOR>\n    <MINQTY>${i.qty}</MINQTY>\n    <REMARKS>${xml(`${set.set_num} ${date}`)}</REMARKS>\n  </ITEM>`;
   });
-  return { text: `<INVENTORY>\n${rows.join('\n')}\n</INVENTORY>\n`, unmatched };
+  return { text: `<INVENTORY>\n${rows.join('\n')}\n</INVENTORY>\n`, unmatched, unlisted: [...unlisted], multiColours: [...multiNames] };
 }
 
 export async function orderDialog({ set, missing }) {
@@ -77,7 +80,12 @@ export async function orderDialog({ set, missing }) {
     const go = $('#ordGo'); const label = go.textContent; go.disabled = true; go.textContent = 'Preparing…';
     try { built = await buildOrder(format, s.items, set, key); } catch (e) { toast(e.message || 'Couldn’t prepare the order.'); return null; } finally { go.textContent = label; go.disabled = !s.items.length; }
     await db.setSetting('orderFormat', format);
-    if (built.unmatched) $('#ordNote').textContent = `${fmt(built.unmatched)} ${built.unmatched === 1 ? 'brick' : 'bricks'} had no BrickLink number and use the Rebrickable one. Check ${built.unmatched === 1 ? 'it' : 'them'} after uploading.`;
+    const notes = [];
+    if (built.unmatched) notes.push(`${fmt(built.unmatched)} ${built.unmatched === 1 ? 'brick' : 'bricks'} had no BrickLink number and use the Rebrickable one. Check ${built.unmatched === 1 ? 'it' : 'them'} after uploading.`);
+    const some = (a) => `${a.slice(0, 4).join(', ')}${a.length > 4 ? ` and ${a.length - 4} more` : ''}`;
+    if (built.unlisted?.length) notes.push(`BrickLink may not list ${some(built.unlisted)}.`);
+    if (built.multiColours?.length) notes.push(`BrickLink has more than one number for ${some(built.multiColours)}. The first was used, so check the colour after uploading.`);
+    $('#ordNote').textContent = notes.join(' ');
     return built;
   };
   const p = openDialog(`

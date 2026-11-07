@@ -370,6 +370,23 @@ export async function undoSave(receipt, rules = null) {
   if (rules) for (const [k, v] of Object.entries(rules)) await db.setSetting(k, v ?? (k === 'storageLog' ? [] : {}));
 }
 
+// A copy of every inventory and log row, so a whole action (Found, Take, Move, Remove) can be put back.
+export async function snapshotAll() {
+  return { inv: new Map((await db.all('inventory')).map((r) => [r.id, r])), log: new Map((await db.all('log')).map((r) => [r.id, r])) };
+}
+
+// Puts every row back as it was in the snapshot. Rows made since are marked removed; nothing is hard-deleted.
+export async function restoreSnapshot(snap) {
+  const now = nowIso();
+  for (const [store, before] of [['inventory', snap.inv], ['log', snap.log]]) {
+    for (const cur of await db.all(store)) {
+      const old = before.get(cur.id);
+      if (!old) { if (!cur.deleted) await db.put(store, { ...cur, deleted: true, updated: now }); continue; }
+      if (JSON.stringify({ ...old, updated: 0 }) !== JSON.stringify({ ...cur, updated: 0 })) await db.put(store, { ...old, updated: now });
+    }
+  }
+}
+
 // Which active bins still want each part+colour: Map 'part|colour' -> [{ bin, rem }].
 export function wantedMap(ctx) {
   const m = new Map();

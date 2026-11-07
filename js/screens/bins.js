@@ -340,7 +340,7 @@ export async function renderBin(id, keepMode = false) {
         listEl.innerHTML = `<p class="empty">${missing.length ? 'No pieces match.' : 'Nothing missing. This set is complete!'}</p>`;
         return;
       }
-      listEl.innerHTML = `<ul class="parts">${shown.map((l) => `
+      const rowHtml = (l, from) => `
         <li class="part">
           <span class="thumb">${l.img ? `<img src="${esc(l.img)}" alt="" loading="lazy">` : ''}</span>
           <span class="pinfo">
@@ -349,15 +349,29 @@ export async function renderBin(id, keepMode = false) {
               <span class="swatch${l.is_trans ? ' trans' : ''}" style="--c:#${esc(l.rgb)}"></span>
               ${esc(l.color_name)} · ${esc(l.part_num)}${l.sticker ? ' <span class="tag">sticker</span>' : ''}
               ${l.have ? `<br>Have ${fmt(l.have)} of ${fmt(l.qty)}` : ''}
-              ${l.avail ? `<br><span class="tag ok">In storage: ${fmt(l.avail)} · ${esc([...new Set(l.stock.map((x) => x.bin.label))].join(', '))}</span>` : ''}
+              ${l.avail ? (from ? `<br><span class="tag ok">In this bin: ${fmt(from.qty)}</span>` : `<br><span class="tag ok">In storage: ${fmt(l.avail)} · ${esc([...new Set(l.stock.map((x) => x.bin.label))].join(', '))}</span>`) : ''}
             </span>
           </span>
           <span class="qty">${fmt(l.rem)}</span>
           <span class="btns">
-            ${l.avail ? `<button type="button" class="btn small primary" data-take="${esc(l.id)}">Take ${fmt(Math.min(l.rem, l.avail))}</button>` : ''}
+            ${l.avail ? `<button type="button" class="btn small primary" data-take="${esc(l.id)}"${from ? ` data-from="${esc(from.bin.id)}"` : ''}>Take ${fmt(Math.min(l.rem, from ? from.qty : l.avail))}</button>` : ''}
             <button type="button" class="btn small" data-found="${esc(l.id)}">Found</button>
           </span>
-        </li>`).join('')}</ul>`;
+        </li>`;
+      if (pickOnly) {
+        // Picking from storage: one heading per storage bin, so a trip to the oddments bin gets everything from it.
+        const order = new Map(ctx.bins.filter((x) => x.type === 'storage').map((x, i) => [x.id, [x.order ?? i, x.label]]));
+        const groups = new Map();
+        for (const l of shown) {
+          const perBin = new Map();
+          for (const x of l.stock) { const g = perBin.get(x.bin.id) || { bin: x.bin, qty: 0 }; g.qty += x.line.qty; perBin.set(x.bin.id, g); }
+          for (const g of perBin.values()) { if (!groups.has(g.bin.id)) groups.set(g.bin.id, { bin: g.bin, items: [] }); groups.get(g.bin.id).items.push([l, g]); }
+        }
+        const sorted = [...groups.values()].sort((x, y) => (order.get(x.bin.id)?.[0] ?? 0) - (order.get(y.bin.id)?.[0] ?? 0) || String(x.bin.label).localeCompare(String(y.bin.label)));
+        listEl.innerHTML = sorted.map((g) => `<h3 class="cat">${esc(g.bin.label)} <small>${g.items.length}</small></h3><ul class="parts">${g.items.map(([l, f]) => rowHtml(l, f)).join('')}</ul>`).join('');
+        return;
+      }
+      listEl.innerHTML = `<ul class="parts">${shown.map((l) => rowHtml(l)).join('')}</ul>`;
       groupByCategory(shown.map((l) => l.cat_name || 'Other'));
       return;
     }
@@ -444,7 +458,7 @@ export async function renderBin(id, keepMode = false) {
     const tb = e.target.closest('[data-take]');
     if (tb) {
       const row = missing.find((l) => l.id === tb.dataset.take);
-      if (row && await takeFromStorage(row, bin)) await renderBin(id, true);
+      if (row && await takeFromStorage(row, bin, tb.dataset.from || null)) await renderBin(id, true);
       return;
     }
     const fb = e.target.closest('[data-found]');
@@ -543,13 +557,15 @@ async function markFound(row, bin) {
 }
 
 // Moves pieces from storage bins into this active bin.
-async function takeFromStorage(row, bin) {
-  const max = Math.min(row.rem, row.avail);
+async function takeFromStorage(row, bin, fromBin = null) {
+  const stock = fromBin ? row.stock.filter((x) => x.bin.id === fromBin) : row.stock;
+  const avail = stock.reduce((n, x) => n + x.line.qty, 0);
+  const max = Math.min(row.rem, avail);
   let qty = max;
   if (max > 1) {
     const { value, data } = await openDialog(`
       <h2>${esc(row.name)}</h2>
-      <p class="hint">${esc(row.color_name)} · ${esc(row.part_num)} · ${fmt(row.avail)} in storage, ${fmt(row.rem)} needed</p>
+      <p class="hint">${esc(row.color_name)} · ${esc(row.part_num)} · ${fmt(avail)} in ${fromBin ? esc(stock[0]?.bin.label || 'storage') : 'storage'}, ${fmt(row.rem)} needed</p>
       <label for="tq">How many are you taking out of storage?</label>
       ${stepperHtml({ id: 'tq', name: 'qty', value: max, max })}
       <div class="row">
@@ -562,7 +578,7 @@ async function takeFromStorage(row, bin) {
   }
   const now = new Date().toISOString();
   let left = qty;
-  for (const { line } of row.stock) {
+  for (const { line } of stock) {
     if (left <= 0) break;
     const take = Math.min(left, line.qty);
     await db.put('inventory', take === line.qty

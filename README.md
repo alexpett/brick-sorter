@@ -17,6 +17,10 @@ Status: stages 1 (set catalogue), 2 (manual inventory and bins) 3 (Google Sheet 
 4. Progress and missing parts
 5. Camera identification
 
+## For developers
+
+See [DEVELOPMENT.md](DEVELOPMENT.md) for code layout, rules and how to ship a change, and [STYLE.md](STYLE.md) for design and wording rules.
+
 ## Keys and privacy
 
 This repository is public. API keys are never stored in the code: they are pasted into the app's Settings screen and kept on your own device.

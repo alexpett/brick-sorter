@@ -349,12 +349,12 @@ export async function renderBin(id, keepMode = false) {
               <span class="swatch${l.is_trans ? ' trans' : ''}" style="--c:#${esc(l.rgb)}"></span>
               ${esc(l.color_name)} · ${esc(l.part_num)}${l.sticker ? ' <span class="tag">sticker</span>' : ''}
               ${l.have ? `<br>Have ${fmt(l.have)} of ${fmt(l.qty)}` : ''}
-              ${l.avail ? (from ? `<br><span class="tag ok">${fmt(from.qty)} in this bin</span>` : `<br><span class="tag ok">In storage: ${fmt(l.avail)} · ${esc([...new Set(l.stock.map((x) => x.bin.label))].join(', '))}</span>`) : ''}
+              ${l.avail ? (from ? `<br><span class="tag ${from.qty >= l.rem ? 'ok' : 'bad'}">${fmt(from.qty)} available · ${fmt(l.rem)} required</span>` : `<br><span class="tag ok">In storage: ${fmt(l.avail)} · ${esc([...new Set(l.stock.map((x) => x.bin.label))].join(', '))}</span>`) : ''}
             </span>
           </span>
-          <span class="qty">${fmt(l.rem)}</span>
+          ${from ? '' : `<span class="qty">${fmt(l.rem)}</span>`}
           <span class="btns">
-            ${from ? (() => { const n = Math.min(l.rem, from.qty); const b = (q, cls, label) => `<button type="button" class="btn small lozenge ${cls}" data-take="${esc(l.id)}" data-from="${esc(from.bin.id)}" data-qty="${q}">${label}</button>`; return n > 1 ? b(1, 'redout', 'Found 1') + b(n, 'primary', 'Found all') : b(1, 'primary', 'Found 1'); })() : l.avail ? `<button type="button" class="btn small primary" data-take="${esc(l.id)}">Take ${fmt(Math.min(l.rem, l.avail))}</button>` : ''}
+            ${from ? (() => { const n = Math.min(l.rem, from.qty); return `<span class="ministep" role="group" aria-label="How many"><button type="button" data-step="-1" aria-label="One fewer">−</button><input class="pqty" type="number" inputmode="numeric" min="1" max="${n}" value="${n}" aria-label="Quantity"><button type="button" data-step="1" aria-label="One more">+</button></span><button type="button" class="btn small lozenge primary" data-take="${esc(l.id)}" data-from="${esc(from.bin.id)}">Found</button>`; })() : l.avail ? `<button type="button" class="btn small primary" data-take="${esc(l.id)}">Take ${fmt(Math.min(l.rem, l.avail))}</button>` : ''}
             ${from ? '' : `<button type="button" class="btn small" data-found="${esc(l.id)}">Found</button>`}
           </span>
         </li>`;
@@ -454,11 +454,15 @@ export async function renderBin(id, keepMode = false) {
   $('#offToggle')?.addEventListener('click', () => { offOnly = !offOnly; renderBin(id, true); });
   $('#neededToggle')?.addEventListener('click', () => { neededOnly = !neededOnly; renderBin(id, true); });
   $('#pickToggle')?.addEventListener('click', () => { pickOnly = !pickOnly; renderBin(id, true); });
+  const clampQty = (inp) => { const max = Number(inp.max) || 1; inp.value = String(Math.max(1, Math.min(max, Math.floor(Number(inp.value)) || 1))); };
+  listEl.addEventListener('change', (e) => { if (e.target.classList?.contains('pqty')) clampQty(e.target); });
   listEl.addEventListener('click', async (e) => {
+    const st = e.target.closest('[data-step]');
+    if (st) { const inp = st.parentElement.querySelector('.pqty'); inp.value = String((Number(inp.value) || 1) + Number(st.dataset.step)); clampQty(inp); return; }
     const tb = e.target.closest('[data-take]');
     if (tb) {
       const row = missing.find((l) => l.id === tb.dataset.take);
-      if (row && await takeFromStorage(row, bin, tb.dataset.from || null, tb.dataset.qty ? Number(tb.dataset.qty) : null)) await renderBin(id, true);
+      if (row && await takeFromStorage(row, bin, tb.dataset.from || null, tb.closest('li').querySelector('.pqty') ? Number(tb.closest('li').querySelector('.pqty').value) : null)) await renderBin(id, true);
       return;
     }
     const fb = e.target.closest('[data-found]');

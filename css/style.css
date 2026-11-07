@@ -665,3 +665,10 @@ label.camchip { cursor: pointer; }
 #scanRoot #matches h2 label { font: inherit; }
 .btn.lozenge { border-radius: 999px; }
 .btn.redout { background: transparent; border: 1.5px solid var(--accent); color: var(--accent); font-weight: 600; }
+.tag.bad { color: #b3261e; border-color: #b3261e; background: transparent; }
+.ministep { display: inline-flex; align-items: center; border: 1.5px solid var(--accent); border-radius: 999px; overflow: hidden; }
+.ministep button { width: 36px; height: 36px; border: 0; background: transparent; color: var(--accent); font-size: 1.25rem; line-height: 1; cursor: pointer; }
+.ministep .pqty { width: 38px; height: 36px; border: 0; padding: 0; text-align: center; font-size: 1rem; font-weight: 700; background: transparent; -moz-appearance: textfield; appearance: textfield; }
+.ministep .pqty::-webkit-outer-spin-button, .ministep .pqty::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+li.part .btns:has(.ministep) { display: flex; flex-direction: column; align-items: stretch; gap: 8px; }
+li.part .btns:has(.ministep) .btn { width: 100%; }

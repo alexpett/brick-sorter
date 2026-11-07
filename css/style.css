@@ -663,3 +663,5 @@ label.camchip { cursor: pointer; }
 .shutterrow > :first-child { justify-self: start; }
 .shutterrow > :last-child { justify-self: end; }
 #scanRoot #matches h2 label { font: inherit; }
+.btn.lozenge { border-radius: 999px; }
+.btn.redout { background: transparent; border: 1.5px solid var(--accent); color: var(--accent); font-weight: 600; }

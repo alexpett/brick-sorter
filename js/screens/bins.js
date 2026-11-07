@@ -349,13 +349,13 @@ export async function renderBin(id, keepMode = false) {
               <span class="swatch${l.is_trans ? ' trans' : ''}" style="--c:#${esc(l.rgb)}"></span>
               ${esc(l.color_name)} · ${esc(l.part_num)}${l.sticker ? ' <span class="tag">sticker</span>' : ''}
               ${l.have ? `<br>Have ${fmt(l.have)} of ${fmt(l.qty)}` : ''}
-              ${l.avail ? (from ? `<br><span class="tag ok">In this bin: ${fmt(from.qty)}</span>` : `<br><span class="tag ok">In storage: ${fmt(l.avail)} · ${esc([...new Set(l.stock.map((x) => x.bin.label))].join(', '))}</span>`) : ''}
+              ${l.avail ? (from ? `<br><span class="tag ok">${fmt(from.qty)} in this bin</span>` : `<br><span class="tag ok">In storage: ${fmt(l.avail)} · ${esc([...new Set(l.stock.map((x) => x.bin.label))].join(', '))}</span>`) : ''}
             </span>
           </span>
           <span class="qty">${fmt(l.rem)}</span>
           <span class="btns">
-            ${l.avail ? `<button type="button" class="btn small primary" data-take="${esc(l.id)}"${from ? ` data-from="${esc(from.bin.id)}"` : ''}>Take ${fmt(Math.min(l.rem, from ? from.qty : l.avail))}</button>` : ''}
-            <button type="button" class="btn small" data-found="${esc(l.id)}">Found</button>
+            ${from ? (() => { const n = Math.min(l.rem, from.qty); const b = (q, cls, label) => `<button type="button" class="btn small lozenge ${cls}" data-take="${esc(l.id)}" data-from="${esc(from.bin.id)}" data-qty="${q}">${label}</button>`; return n > 1 ? b(1, 'redout', 'Found 1') + b(n, 'primary', 'Found all') : b(1, 'primary', 'Found 1'); })() : l.avail ? `<button type="button" class="btn small primary" data-take="${esc(l.id)}">Take ${fmt(Math.min(l.rem, l.avail))}</button>` : ''}
+            ${from ? '' : `<button type="button" class="btn small" data-found="${esc(l.id)}">Found</button>`}
           </span>
         </li>`;
       if (pickOnly) {
@@ -458,7 +458,7 @@ export async function renderBin(id, keepMode = false) {
     const tb = e.target.closest('[data-take]');
     if (tb) {
       const row = missing.find((l) => l.id === tb.dataset.take);
-      if (row && await takeFromStorage(row, bin, tb.dataset.from || null)) await renderBin(id, true);
+      if (row && await takeFromStorage(row, bin, tb.dataset.from || null, tb.dataset.qty ? Number(tb.dataset.qty) : null)) await renderBin(id, true);
       return;
     }
     const fb = e.target.closest('[data-found]');
@@ -557,12 +557,12 @@ async function markFound(row, bin) {
 }
 
 // Moves pieces from storage bins into this active bin.
-async function takeFromStorage(row, bin, fromBin = null) {
+async function takeFromStorage(row, bin, fromBin = null, fixedQty = null) {
   const stock = fromBin ? row.stock.filter((x) => x.bin.id === fromBin) : row.stock;
   const avail = stock.reduce((n, x) => n + x.line.qty, 0);
   const max = Math.min(row.rem, avail);
-  let qty = max;
-  if (max > 1) {
+  let qty = fixedQty ? Math.min(fixedQty, max) : max;
+  if (max > 1 && !fixedQty) {
     const { value, data } = await openDialog(`
       <h2>${esc(row.name)}</h2>
       <p class="hint">${esc(row.color_name)} · ${esc(row.part_num)} · ${fmt(avail)} in ${fromBin ? esc(stock[0]?.bin.label || 'storage') : 'storage'}, ${fmt(row.rem)} needed</p>

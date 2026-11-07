@@ -354,7 +354,7 @@ export async function renderBin(id, keepMode = false) {
           </span>
           ${from ? '' : `<span class="qty">${fmt(l.rem)}</span>`}
           <span class="btns">
-            ${from ? (() => { const n = Math.min(l.rem, from.qty); return `<div class="stepper pickstep" role="group" aria-label="Quantity"><button type="button" data-step="-1" aria-label="One fewer">−</button><input class="pqty" type="number" inputmode="numeric" min="1" max="${n}" step="1" value="${n}" aria-label="Quantity"><button type="button" data-step="1" aria-label="One more">+</button></div><button type="button" class="btn small lozenge primary" data-take="${esc(l.id)}" data-from="${esc(from.bin.id)}">Found</button>`; })() : l.avail ? `<button type="button" class="btn small primary" data-take="${esc(l.id)}">Take ${fmt(Math.min(l.rem, l.avail))}</button>` : ''}
+            ${from ? (() => { const n = Math.min(l.rem, from.qty); return `<div class="stepper pickstep" role="group" aria-label="Quantity"><button type="button" data-step="-1" aria-label="One fewer">−</button><input class="pqty" type="number" inputmode="numeric" min="1" max="${n}" step="1" value="1" aria-label="Quantity"><button type="button" data-step="1" aria-label="One more">+</button></div><button type="button" class="btn small lozenge primary" data-take="${esc(l.id)}" data-from="${esc(from.bin.id)}">Found</button>`; })() : l.avail ? `<button type="button" class="btn small primary" data-take="${esc(l.id)}">Take ${fmt(Math.min(l.rem, l.avail))}</button>` : ''}
             ${from ? '' : `<button type="button" class="btn small" data-found="${esc(l.id)}">Found</button>`}
           </span>
         </li>`;

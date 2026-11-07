@@ -156,13 +156,14 @@ export async function drawRules() {
 // ---------- One bin (or all pieces) ----------
 
 let binMode = 'missing'; // 'missing' | 'found' for active bins
+const pickOpen = new Set(); // storage bins expanded in the pick list
 let pickOnly = false; // missing list: only pieces that are sitting in storage
 let colorFilter = null; // colour id chosen with the Colour Wall (bin view)
 let offOnly = false; // storage bin: only lines outside the bin's colour rule
 let neededOnly = false; // storage bin: only lines an active set still wants
 
 export async function renderBin(id, keepMode = false) {
-  if (!keepMode) { binMode = 'missing'; pickOnly = false; colorFilter = null; neededOnly = false; offOnly = false; }
+  if (!keepMode) { binMode = 'missing'; pickOnly = false; pickOpen.clear(); colorFilter = null; neededOnly = false; offOnly = false; }
   const ctx = await bins.loadContext();
   const isAll = id === 'all';
   const bin = isAll ? null : ctx.bins.find((b) => b.id === id);
@@ -346,10 +347,10 @@ export async function renderBin(id, keepMode = false) {
           <span class="pinfo">
             <span class="pname">${esc(l.name)}</span>
             <span class="pmeta">
-              <span class="swatch${l.is_trans ? ' trans' : ''}" style="--c:#${esc(l.rgb)}"></span>
-              ${esc(l.color_name)} · ${esc(l.part_num)}${l.sticker ? ' <span class="tag">sticker</span>' : ''}
-              ${l.have ? `<br>Have ${fmt(l.have)} of ${fmt(l.qty)}` : ''}
-              ${l.avail ? (from ? `<br><span class="tag ${from.qty >= l.rem ? 'ok' : 'bad'}">${fmt(from.qty)} available · ${fmt(l.rem)} required</span>` : `<br><span class="tag ok">In storage: ${fmt(l.avail)} · ${esc([...new Set(l.stock.map((x) => x.bin.label))].join(', '))}</span>`) : ''}
+              ${from ? '<br>' : ''}<span class="swatch${l.is_trans ? ' trans' : ''}" style="--c:#${esc(l.rgb)}"></span>
+              ${esc(l.color_name)}${from ? '' : ` · ${esc(l.part_num)}`}${l.sticker ? ' <span class="tag">sticker</span>' : ''}
+              ${l.have && !from ? `<br>Have ${fmt(l.have)} of ${fmt(l.qty)}` : ''}
+              ${l.avail ? (from ? `<br><span class="tag sm ${from.qty >= l.rem ? 'ok' : 'bad'}">${fmt(from.qty)} available · ${fmt(l.rem)} required</span>` : `<br><span class="tag ok">In storage: ${fmt(l.avail)} · ${esc([...new Set(l.stock.map((x) => x.bin.label))].join(', '))}</span>`) : ''}
             </span>
           </span>
           ${from ? '' : `<span class="qty">${fmt(l.rem)}</span>`}
@@ -368,7 +369,7 @@ export async function renderBin(id, keepMode = false) {
           for (const g of perBin.values()) { if (!groups.has(g.bin.id)) groups.set(g.bin.id, { bin: g.bin, items: [] }); groups.get(g.bin.id).items.push([l, g]); }
         }
         const sorted = [...groups.values()].sort((x, y) => (order.get(x.bin.id)?.[0] ?? 0) - (order.get(y.bin.id)?.[0] ?? 0) || String(x.bin.label).localeCompare(String(y.bin.label)));
-        listEl.innerHTML = sorted.map((g) => `<h3 class="cat">${esc(g.bin.label)} <small>${g.items.length}</small></h3><ul class="parts">${g.items.map(([l, f]) => rowHtml(l, f)).join('')}</ul>`).join('');
+        listEl.innerHTML = sorted.map((g) => `<button type="button" class="pickgroup" data-pg="${esc(g.bin.id)}" aria-expanded="${pickOpen.has(g.bin.id)}"><span class="binchip store"${bins.chipStyle(g.bin)}>${esc(bins.binShort(g.bin))}</span><span class="pgname">${esc(g.bin.label)}</span><small>${g.items.length}</small><span class="pgcaret" aria-hidden="true">›</span></button><ul class="parts"${pickOpen.has(g.bin.id) ? '' : ' hidden'}>${g.items.map(([l, f]) => rowHtml(l, f)).join('')}</ul>`).join('');
         return;
       }
       listEl.innerHTML = `<ul class="parts">${shown.map((l) => rowHtml(l)).join('')}</ul>`;
@@ -457,6 +458,14 @@ export async function renderBin(id, keepMode = false) {
   const clampQty = (inp) => { const max = Number(inp.max) || 1; inp.value = String(Math.max(1, Math.min(max, Math.floor(Number(inp.value)) || 1))); };
   listEl.addEventListener('change', (e) => { if (e.target.classList?.contains('pqty')) clampQty(e.target); });
   listEl.addEventListener('click', async (e) => {
+    const pg = e.target.closest('[data-pg]');
+    if (pg) {
+      const open = pg.getAttribute('aria-expanded') !== 'true';
+      pg.setAttribute('aria-expanded', String(open));
+      pg.nextElementSibling.hidden = !open;
+      if (open) pickOpen.add(pg.dataset.pg); else pickOpen.delete(pg.dataset.pg);
+      return;
+    }
     const st = e.target.closest('[data-step]');
     if (st) { const inp = st.parentElement.querySelector('.pqty'); inp.value = String((Number(inp.value) || 1) + Number(st.dataset.step)); clampQty(inp); return; }
     const tb = e.target.closest('[data-take]');

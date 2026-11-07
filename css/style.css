@@ -671,10 +671,9 @@ label.camchip { cursor: pointer; }
 li.part .btns:has(.pickstep) { display: flex; flex-direction: column; align-items: stretch; gap: 8px; }
 li.part .btns:has(.pickstep) .btn { width: 100%; }
 .tag.sm { font-size: 0.68rem; padding: 0 5px; white-space: nowrap; }
-.pickgroup { display: flex; align-items: center; gap: 10px; width: 100%; margin: 14px 0 4px; padding: 8px 4px; background: none; border: 0; border-bottom: 1px solid var(--border); font: inherit; color: var(--text); cursor: pointer; text-align: left; }
-.pickgroup .pgname { flex: 1; font-weight: 700; }
-.pickgroup small { color: var(--muted); font-weight: 600; }
-.pickgroup .pgcaret { font-size: 1.4rem; line-height: 1; color: var(--muted); transition: transform .15s; }
+.pickgroup { width: 100%; margin: 10px 0 4px; font: inherit; color: var(--text); text-align: left; cursor: pointer; box-sizing: border-box; }
+.pickgroup .cardtext { flex: 1; min-width: 0; }
+.pickgroup .pgcaret { font-size: 1.5rem; line-height: 1; color: var(--muted); transition: transform .15s; }
 .pickgroup[aria-expanded="true"] .pgcaret { transform: rotate(90deg); }
 ul.parts[hidden] { display: none; }
 .pickstep button { width: 36px; height: 44px; }

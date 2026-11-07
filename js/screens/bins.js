@@ -369,7 +369,7 @@ export async function renderBin(id, keepMode = false) {
           for (const g of perBin.values()) { if (!groups.has(g.bin.id)) groups.set(g.bin.id, { bin: g.bin, items: [] }); groups.get(g.bin.id).items.push([l, g]); }
         }
         const sorted = [...groups.values()].sort((x, y) => (order.get(x.bin.id)?.[0] ?? 0) - (order.get(y.bin.id)?.[0] ?? 0) || String(x.bin.label).localeCompare(String(y.bin.label)));
-        listEl.innerHTML = sorted.map((g) => `<button type="button" class="pickgroup" data-pg="${esc(g.bin.id)}" aria-expanded="${pickOpen.has(g.bin.id)}"><span class="binchip store"${bins.chipStyle(g.bin)}>${esc(bins.binShort(g.bin))}</span><span class="pgname">${esc(g.bin.label)}</span><small>${g.items.length}</small><span class="pgcaret" aria-hidden="true">›</span></button><ul class="parts"${pickOpen.has(g.bin.id) ? '' : ' hidden'}>${g.items.map(([l, f]) => rowHtml(l, f)).join('')}</ul>`).join('');
+        listEl.innerHTML = sorted.map((g) => `<button type="button" class="card binrow pickgroup" data-pg="${esc(g.bin.id)}" aria-expanded="${pickOpen.has(g.bin.id)}"><div class="cardtext"><div class="cardname">${esc(g.bin.label)}</div><div class="cardmeta">${pl(g.items.length, 'part', 'parts')} to pick</div></div><span class="pgcaret" aria-hidden="true">›</span><span class="binchip store big"${bins.chipStyle(g.bin)}>${esc(bins.binShort(g.bin))}</span></button><ul class="parts"${pickOpen.has(g.bin.id) ? '' : ' hidden'}>${g.items.map(([l, f]) => rowHtml(l, f)).join('')}</ul>`).join('');
         return;
       }
       listEl.innerHTML = `<ul class="parts">${shown.map((l) => rowHtml(l)).join('')}</ul>`;

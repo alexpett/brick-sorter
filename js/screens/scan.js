@@ -171,7 +171,7 @@ async function consent() {
     <h2>Send photos to Brickognize?</h2>
     <p>To identify a brick, the photo is sent to the free Brickognize service. Their terms say uploaded photos may be stored and used to improve their models. Only the photo is sent, only when you press the button.</p>
     <div class="row">
-      <button class="btn" value="cancel" formnovalidate>Not now</button>
+      <button class="btn" value="cancel" formnovalidate>Cancel</button>
       <button class="btn primary" value="ok">OK, continue</button>
     </div>`);
   if (v !== 'ok') return false;

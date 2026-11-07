@@ -389,7 +389,7 @@ async function renderSet(setNum) {
     view.innerHTML = '<p class="empty">That set isn’t in your list. <a href="#/sets">Back to sets</a></p>';
     return;
   }
-  setTitle(rec.set_num);
+  setTitle(rec.name);
   const lines = await db.byIndex('setParts', 'set_num', setNum);
   lines.sort((a, b) => a.cat_name.localeCompare(b.cat_name) || a.name.localeCompare(b.name)
     || String(a.color_name).localeCompare(String(b.color_name)));
@@ -413,7 +413,7 @@ async function renderSet(setNum) {
       <div id="partList"></div>
     </section>
     <section class="panel actions">
-      <button class="btn" id="refreshSet">Refresh from Rebrickable</button>
+      <button class="btn redout" id="refreshSet">Refresh from Rebrickable</button>
       <button class="btn danger" id="removeSet">Remove this set</button>
     </section>`;
 
@@ -468,18 +468,18 @@ async function drawBinPanel(rec) {
     el.innerHTML = `
       <h2>Bin ${fresh.active_bin}</h2>
       <p>${a ? `${fmt(a.heldTotal)} of ${fmt(a.neededTotal)} bricks sorted (${Math.round(a.frac * 100)}%).` : 'Active.'}</p>
-      <div class="actions">
-        <a class="btn" href="#/bin/${encodeURIComponent(fresh.bin_id)}">Open bin</a>
-        <button class="btn danger" id="abandonBin">Remove bin</button>
+      <div class="setactions">
+        <a class="btn primary" href="#/bin/${encodeURIComponent(fresh.bin_id)}">Continue build</a>
+        <button type="button" class="iconbtn trash" id="abandonBin" aria-label="Remove Bin ${fresh.active_bin}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14M10 10v6M14 10v6"/></svg></button>
       </div>`;
     $('#abandonBin').addEventListener('click', async () => {
       if (await confirmAbandon(fresh.bin_id)) await renderSet(rec.set_num);
     });
   } else {
     el.innerHTML = `
-      <h2>Rebuild this set</h2>
+      <h2>Ready to build?</h2>
       <p>Starting it gives the set its own numbered bin. Matching bricks you add will be put in that bin until the set is complete.</p>
-      <button class="btn primary" id="startBin">Start rebuilding this set</button>`;
+      <button class="btn primary" id="startBin">Start build</button>`;
     $('#startBin').addEventListener('click', async () => {
       try {
         const bin = await bins.activateSet(rec.set_num);

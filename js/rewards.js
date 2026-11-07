@@ -110,5 +110,5 @@ export async function celebrate() {
   await openDialog(`
     <h2>${r.badges.length ? 'New badge!' : 'Well done!'}</h2>
     ${lines.join('')}
-    <div class="row"><button class="btn primary" value="ok">Keep going</button></div>`);
+    <div class="row"><button class="btn primary" value="ok">Close</button></div>`);
 }

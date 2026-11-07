@@ -117,7 +117,7 @@ export async function renderHome() {
       <a class="btn primary block" href="#/add">Log pieces</a>
     </section>
     ${rows ? `<section><h2 class="section-title">In progress</h2><ul class="cards">${rows}</ul></section>` : `
-    <section class="panel"><p class="empty">${setsAdded ? 'Open a set and choose “Start rebuilding this set” to give it a bin.' : 'Add a set to get started.'} <a href="#/sets">Go to Sets</a></p></section>`}`;
+    <section class="panel"><p class="empty">${setsAdded ? 'Open a set and choose “Start build” to give it a bin.' : 'Add a set to get started.'} <a href="#/sets">Go to Sets</a></p></section>`}`;
   view.insertAdjacentHTML('beforeend', badges);
   view.querySelector('#goalBtn').addEventListener('click', async () => {
     const { value, data } = await openDialog(`

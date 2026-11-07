@@ -46,7 +46,7 @@ export async function renderBins() {
         </a>
       </li>`;
     }).join('')}</ul>`
-    : '<p class="empty">No active bins yet. Open a set and choose “Start rebuilding this set”.</p>';
+    : '<p class="empty">No active bins yet. Open a set and choose “Start build”.</p>';
 
   view.innerHTML = `
     <a class="chip addbin searchall" href="#/bin/all"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.5 15.5L21 21"/></svg> Search all bricks</a>
@@ -355,8 +355,10 @@ export async function renderBin(id, keepMode = false) {
           </span>
           ${from ? '' : `<span class="qty">${fmt(l.rem)}</span>`}
           <span class="btns">
-            ${from ? (() => { const n = Math.min(l.rem, from.qty); return `<div class="stepper pickstep" role="group" aria-label="Quantity"><button type="button" data-step="-1" aria-label="One fewer">−</button><input class="pqty" type="number" inputmode="numeric" min="1" max="${n}" step="1" value="1" aria-label="Quantity"><button type="button" data-step="1" aria-label="One more">+</button></div><button type="button" class="btn small lozenge primary" data-take="${esc(l.id)}" data-from="${esc(from.bin.id)}">Found</button>`; })() : l.avail ? `<button type="button" class="btn small primary" data-take="${esc(l.id)}">Take ${fmt(Math.min(l.rem, l.avail))}</button>` : ''}
-            ${from ? '' : `<button type="button" class="btn small" data-found="${esc(l.id)}">Found</button>`}
+            ${(() => { const n = from ? Math.min(l.rem, from.qty) : l.rem;
+              const step = `<div class="stepper pickstep" role="group" aria-label="Quantity"><button type="button" data-step="-1" aria-label="One fewer">−</button><input class="pqty" type="number" inputmode="numeric" min="1" max="${n}" step="1" value="1" aria-label="Quantity"><button type="button" data-step="1" aria-label="One more">+</button></div>`;
+              if (from) return `${step}<button type="button" class="btn small lozenge primary" data-take="${esc(l.id)}" data-from="${esc(from.bin.id)}">Found</button>`;
+              return `${step}<button type="button" class="btn small lozenge primary" data-found="${esc(l.id)}">Found</button>${l.avail ? `<button type="button" class="btn small lozenge redout" data-take="${esc(l.id)}">Take from storage</button>` : ''}`; })()}
           </span>
         </li>`;
       if (pickOnly) {
@@ -477,7 +479,7 @@ export async function renderBin(id, keepMode = false) {
     const fb = e.target.closest('[data-found]');
     if (fb) {
       const row = missing.find((l) => l.id === fb.dataset.found);
-      if (row && await markFound(row, bin)) { await renderBin(id, true); await celebrate(); }
+      if (row && await markFound(row, bin, Number(fb.closest('li').querySelector('.pqty')?.value) || null)) { await renderBin(id, true); await celebrate(); }
       return;
     }
     const mv = e.target.closest('[data-move]');
@@ -542,9 +544,9 @@ export async function confirmAbandon(binId) {
 
 // ---------- Mark a missing brick as found ----------
 
-async function markFound(row, bin) {
-  let qty = row.rem;
-  if (row.rem > 1) {
+async function markFound(row, bin, fixedQty = null) {
+  let qty = fixedQty ? Math.min(fixedQty, row.rem) : row.rem;
+  if (row.rem > 1 && !fixedQty) {
     const { value, data } = await openDialog(`
       <h2>${esc(row.name)}</h2>
       <p class="hint">${esc(row.color_name)} · ${esc(row.part_num)} · ${fmt(row.rem)} still missing</p>

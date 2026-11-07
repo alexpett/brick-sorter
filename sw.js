@@ -1,5 +1,5 @@
 // Caches the app shell so Brick Sorter opens offline. Rebrickable calls are never cached here.
-const CACHE = 'brick-sorter-v69';
+const CACHE = 'brick-sorter-v71';
 const SHELL = [
   './',
   'index.html',
@@ -11,7 +11,8 @@ const SHELL = [
   'js/sync.js',
   'js/data.js',
   'js/bins.js',
-  'js/screens/add.js',
+  'js/swatch.js',
+  'js/order.js',
   'js/screens/scan.js',
   'js/screens/sorter.js',
   'js/screens/home.js',

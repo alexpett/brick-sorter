@@ -401,7 +401,7 @@ async function renderSet(setNum) {
       <div>
         <h2 class="setname">${esc(rec.name)}</h2>
         <p class="cardmeta">${esc(rec.set_num)} · ${esc(rec.year)}</p>
-        <p class="stats"><strong>${fmt(rec.pieces)}</strong> pieces · <strong>${fmt(rec.line_count)}</strong> part types${
+        <p class="setstats"><strong>${fmt(rec.pieces)}</strong> pieces · <strong>${fmt(rec.line_count)}</strong> part types${
           rec.sticker_lines ? ` · <strong>${fmt(rec.sticker_lines)}</strong> sticker` : ''}</p>
         <p class="hint">${rec.spares ? `${fmt(rec.spares)} spare pieces are not counted. ` : ''}${rec.figs_at ? 'Minifigure parts are included.' : 'Minifigure parts are not included.'}</p>
       </div>

@@ -8,6 +8,8 @@
   --accent-ink: #ffffff;
   --danger: #b3261e;
   --ok: #1f7a3d;
+  --plate-bg: #d9d4cc;
+  --dash: #b9b2aa;
   --warn: #8a5300;
   --shadow: 0 1px 2px rgba(29, 27, 26, 0.06);
   --radius: 12px;
@@ -25,6 +27,8 @@
     --accent-ink: #ffffff;
     --danger: #ef7b72;
     --ok: #6fcf8b;
+    --plate-bg: #2b2725;
+    --dash: #5a534d;
     --warn: #f0b45a;
     --shadow: none;
   }
@@ -189,7 +193,7 @@ input:focus-visible, .btn:focus-visible, .card:focus-visible, .choice:focus-visi
 .backlink { display: inline-block; margin: 0 0 12px; padding: 6px 0; text-decoration: none; font-weight: 600; }
 .hero { display: flex; gap: 14px; align-items: flex-start; }
 .setname { margin: 0 0 2px; font-size: 1.15rem; }
-.stats { margin: 8px 0 4px; }
+.setstats { margin: 8px 0 4px; }
 
 .cat { margin: 18px 0 6px; font-size: 0.8rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
 .parts { list-style: none; margin: 0; padding: 0; }
@@ -577,11 +581,11 @@ dialog .colorbtn { width: 100%; }
 /* bin page: edit/trash icons, open/full toggle, inventory heading */
 .binpanel { position: relative; }
 .binpanel .setname { padding-right: 44px; }
-.iconbtn { display: inline-grid; place-items: center; width: 40px; height: 40px; padding: 0; border-radius: 999px; border: 1px solid var(--line, #e6e0d9); background: transparent; color: inherit; cursor: pointer; }
+.iconbtn { display: inline-grid; place-items: center; width: 40px; height: 40px; padding: 0; border-radius: 999px; border: 1px solid var(--border); background: transparent; color: inherit; cursor: pointer; }
 .editbtn { position: absolute; top: 10px; right: 10px; }
 .binfoot { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 14px; }
-.trash { color: var(--danger, #b3261e); border-color: transparent; width: 36px; height: 36px; }
-.openfull { display: inline-flex; border: 1px solid var(--line, #cfc8c0); border-radius: 999px; overflow: hidden; }
+.trash { color: var(--danger); border-color: transparent; width: 36px; height: 36px; }
+.openfull { display: inline-flex; border: 1px solid var(--border); border-radius: 999px; overflow: hidden; }
 .openfull button { padding: 7px 18px; border: 0; background: transparent; color: inherit; font: inherit; font-weight: 600; cursor: pointer; }
 .openfull button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
 .panelhead { margin: 0 0 12px; font-size: 1.1rem; }
@@ -615,7 +619,7 @@ dialog .colorbtn { width: 100%; }
 .chip.searchall { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; box-sizing: border-box; text-decoration: none; margin-bottom: 4px; }
 
 /* sets page: dashed "+ Add set" tile */
-.addsettile { display: block; width: 100%; box-sizing: border-box; margin-top: 12px; padding: 20px; border: 2px dashed #b9b2aa; border-radius: 14px; background: transparent; color: var(--muted); font: inherit; font-weight: 700; text-align: center; cursor: pointer; }
+.addsettile { display: block; width: 100%; box-sizing: border-box; margin-top: 12px; padding: 20px; border: 2px dashed var(--dash); border-radius: 14px; background: transparent; color: var(--muted); font: inherit; font-weight: 700; text-align: center; cursor: pointer; }
 .addsettile:active { background: rgba(0,0,0,.04); }
 
 /* sets page search */
@@ -632,13 +636,13 @@ label.check { display: flex; align-items: center; gap: 10px; margin: 6px 0; font
 label.check input { width: 22px; height: 22px; }
 
 /* Swatch: the colour plate as a grid of 1 x 1 plates seen from above */
-.swgrid { display: grid; grid-template-columns: repeat(8, 1fr); gap: 6px; padding: 10px; border-radius: 14px; background: #d9d4cc; }
+.swgrid { display: grid; grid-template-columns: repeat(8, 1fr); gap: 6px; padding: 10px; border-radius: 14px; background: var(--plate-bg); }
 .swcell { position: relative; aspect-ratio: 1; border: 0; padding: 0; border-radius: 9px; background: var(--c, transparent); cursor: pointer; display: block; -webkit-touch-callout: none; user-select: none; -webkit-user-select: none; touch-action: manipulation; box-shadow: inset 0 0 0 1px rgba(0,0,0,.12); }
 .swcell.trans { background: color-mix(in srgb, var(--c) 78%, #fff); }
 .swstud { position: absolute; inset: 24%; border-radius: 50%; border: 2px solid rgba(0,0,0,.22); background: radial-gradient(circle at 32% 30%, rgba(255,255,255,.5), rgba(255,255,255,0) 55%); box-shadow: 0 1px 0 rgba(255,255,255,.25); }
 .swcell:active { transform: scale(.94); }
 .swcell[aria-pressed="true"] { outline: 3px solid var(--accent); outline-offset: 1px; }
-.swcell.empty { background: transparent; border: 2px dashed #b9b2aa; box-shadow: none; opacity: .5; cursor: default; }
+.swcell.empty { background: transparent; border: 2px dashed var(--dash); box-shadow: none; opacity: .5; cursor: default; }
 .swcell.empty .swstud { border-color: rgba(0,0,0,.12); background: none; box-shadow: none; }
 button.swcell.empty { cursor: pointer; opacity: .7; }
 .swname { min-height: 1.4em; margin: 10px 0 0; text-align: center; color: var(--muted); font-size: .9rem; }
@@ -665,7 +669,7 @@ label.camchip { cursor: pointer; }
 #scanRoot #matches h2 label { font: inherit; }
 .btn.lozenge { border-radius: 999px; }
 .btn.redout { background: transparent; border: 1.5px solid var(--accent); color: var(--accent); font-weight: 600; }
-.tag.bad { color: #b3261e; border-color: #b3261e; background: transparent; }
+.tag.bad { color: var(--danger); border-color: var(--danger); background: transparent; }
 .pickstep .pqty { -moz-appearance: textfield; appearance: textfield; }
 .pickstep .pqty::-webkit-outer-spin-button, .pickstep .pqty::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
 li.part .btns:has(.pickstep) { display: flex; flex-direction: column; align-items: stretch; gap: 8px; }
@@ -682,11 +686,11 @@ ul.parts[hidden] { display: none; }
 li.part .pinfo { min-width: 0; }
 
 /* Colour Wall tiles: the same plan-view plate as the Swatch */
-.cswatch .swatch.lg, .colorbtn.tile .swatch.lg { position: relative; width: 44px; height: 44px; border-radius: 10px; box-shadow: inset 0 0 0 1px rgba(0,0,0,.12); }
-.cswatch .swatch.lg::after, .colorbtn.tile .swatch.lg::after { content: ""; position: absolute; inset: 24%; border-radius: 50%; border: 2px solid rgba(0,0,0,.22); background: radial-gradient(circle at 32% 30%, rgba(255,255,255,.5), rgba(255,255,255,0) 55%); box-shadow: 0 1px 0 rgba(255,255,255,.25); }
+.cswatch .swatch.lg, .colorbtn.colortile .swatch.lg { position: relative; width: 44px; height: 44px; border-radius: 10px; box-shadow: inset 0 0 0 1px rgba(0,0,0,.12); }
+.cswatch .swatch.lg::after, .colorbtn.colortile .swatch.lg::after { content: ""; position: absolute; inset: 24%; border-radius: 50%; border: 2px solid rgba(0,0,0,.22); background: radial-gradient(circle at 32% 30%, rgba(255,255,255,.5), rgba(255,255,255,0) 55%); box-shadow: 0 1px 0 rgba(255,255,255,.25); }
 
 /* The chosen colour on the sorting panel: a plate above its name, like the Colour Wall tiles */
-.colorbtn.tile { flex: 0 0 108px; flex-direction: column; justify-content: center; gap: 4px; padding: 8px 4px; text-align: center; background: var(--surface); }
-.colorbtn.tile .swatch.lg { flex: none; }
-.colorbtn.tile span:last-child { font-size: 0.75rem; line-height: 1.15; font-weight: 600; white-space: normal; overflow-wrap: anywhere; text-overflow: clip; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-.cqrow:has(.colorbtn.tile) { justify-content: space-between; }
+.colorbtn.colortile { flex: 0 0 108px; flex-direction: column; justify-content: center; gap: 4px; padding: 8px 4px; text-align: center; background: var(--surface); }
+.colorbtn.colortile .swatch.lg { flex: none; }
+.colorbtn.colortile span:last-child { font-size: 0.75rem; line-height: 1.15; font-weight: 600; white-space: normal; overflow-wrap: anywhere; text-overflow: clip; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.cqrow:has(.colorbtn.colortile) { justify-content: space-between; }

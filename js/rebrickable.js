@@ -102,6 +102,22 @@ export function getSetParts(setNum, key, onPage) {
   );
 }
 
+// The minifigures in a set, and the parts of each. Rebrickable keeps these apart from the set's own parts list.
+// Returns results shaped like set parts, with each quantity already multiplied by the number of that figure,
+// and the figure's name in _fig.
+export async function getSetFigureParts(setNum, key, onFigure) {
+  const figs = await allPages(`/sets/${encodeURIComponent(setNum)}/minifigs/`, { page_size: 200 }, key);
+  const out = [];
+  let n = 0;
+  for (const f of figs) {
+    const qty = Number(f.quantity) || 1;
+    const parts = await allPages(`/minifigs/${encodeURIComponent(f.set_num)}/parts/`, { page_size: 1000, inc_part_details: 1 }, key);
+    for (const r of parts) out.push({ ...r, quantity: (Number(r.quantity) || 0) * qty, _fig: f.set_name || f.set_num });
+    if (onFigure) onFigure(++n, figs.length);
+  }
+  return out;
+}
+
 // Rebrickable part(s) that BrickLink knows by this number (the scanner returns BrickLink numbers).
 export async function findByBricklink(id, key) {
   const data = await call('/parts/', { bricklink_id: id, page_size: 5 }, key);

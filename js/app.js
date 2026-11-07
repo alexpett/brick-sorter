@@ -68,11 +68,17 @@ function buildLines(setNum, results, catMap) {
   for (const r of results) {
     const qty = Number(r.quantity) || 0;
     if (r.is_spare) { spares += qty; continue; }
+    const fig = r._fig ? decode(r._fig) : '';
     const p = r.part || {};
     const c = r.color || {};
     const id = `${setNum}|${p.part_num}|${c.id}`;
     const existing = lines.get(id);
-    if (existing) { existing.qty += qty; continue; }
+    if (existing) {
+      existing.qty += qty;
+      if (fig && existing.fig_qty !== undefined) { existing.fig_qty += qty; if (!existing.figs.includes(fig)) existing.figs.push(fig); }
+      else if (fig) { existing.fig_qty = qty; existing.figs = [fig]; }
+      continue;
+    }
     const catName = catMap.get(p.part_cat_id) || 'Other';
     lines.set(id, {
       id,
@@ -89,12 +95,29 @@ function buildLines(setNum, results, catMap) {
       qty,
       element_id: r.element_id || null,
       sticker: isSticker(catName, p.part_num, p.name),
+      ...(fig ? { fig_qty: qty, figs: [fig] } : {}),
     });
   }
   return { lines: [...lines.values()], spares };
 }
 
-async function storeSet(info, results, catMap, previous) {
+const includeFigs = async () => (await db.getSetting('includeFigs')) !== false;
+
+// A set's parts, plus its minifigure parts when that is switched on. A failure fetching the figures never
+// loses the set: it is saved without them and `figs` says so.
+async function downloadParts(setNum, key, onProgress) {
+  const results = await rb.getSetParts(setNum, key, (n, total) => onProgress?.(`downloading parts… ${fmt(n)}${total ? ` of ${fmt(total)}` : ''}`, total ? n / total : null));
+  if (!(await includeFigs())) return { results, figs: false };
+  try {
+    const figParts = await rb.getSetFigureParts(setNum, key, (n, total) => onProgress?.(`downloading minifigures… ${n} of ${total}`, null));
+    return { results: [...results, ...figParts], figs: true };
+  } catch (e) {
+    if (e.kind === 'key' || e.kind === 'network') throw e;
+    return { results, figs: false, figError: e.message };
+  }
+}
+
+async function storeSet(info, results, catMap, previous, figsIncluded = false) {
   const { lines, spares } = buildLines(info.set_num, results, catMap);
   const now = new Date().toISOString();
   const rec = {
@@ -111,6 +134,7 @@ async function storeSet(info, results, catMap, previous) {
     line_count: lines.length,
     pieces: lines.reduce((n, l) => n + l.qty, 0),
     sticker_lines: lines.filter((l) => l.sticker).length,
+    figs_at: figsIncluded ? now : null,
     spares,
     added: previous?.added || now,
     parts_at: now,
@@ -319,16 +343,10 @@ async function addOne(token, line, key) {
   line.set('getting the part categories…');
   const catMap = await ensureCategories(key);
   line.set(`downloading parts for ${decode(info.name)}…`, 'work', 0);
-  const results = await rb.getSetParts(info.set_num, key, (n, total) => {
-    line.set(
-      `downloading parts… ${fmt(n)}${total ? ` of ${fmt(total)}` : ''}`,
-      'work',
-      total ? n / total : null,
-    );
-  });
+  const dl = await downloadParts(info.set_num, key, (text, frac) => line.set(text, 'work', frac));
   line.set('saving to this device…');
-  const rec = await storeSet(info, results, catMap, dup);
-  line.set(`added ${decode(info.name)}: ${fmt(rec.line_count)} part types, ${fmt(rec.pieces)} pieces`, 'ok');
+  const rec = await storeSet(info, dl.results, catMap, dup, dl.figs);
+  line.set(`added ${decode(info.name)}: ${fmt(rec.line_count)} part types, ${fmt(rec.pieces)} pieces${dl.figError ? ' (minifigures could not be added; refresh the set to retry)' : ''}`, 'ok');
 }
 
 async function addSets(text) {
@@ -482,8 +500,8 @@ function partRow(l) {
         <div class="pname">${esc(l.name)}</div>
         <div class="pmeta">
           <span class="swatch${l.is_trans ? ' trans' : ''}" style="--c:#${esc(l.rgb)}"></span>
-          ${esc(l.color_name)} · ${esc(l.part_num)}${l.sticker ? ' <span class="tag">sticker</span>' : ''}
-        </div>
+          ${esc(l.color_name)} · ${esc(l.part_num)}${l.sticker ? ' <span class="tag">sticker</span>' : ''}${l.figs?.length ? ` <span class="tag" title="${esc(l.figs.join(', '))}">minifig${l.fig_qty < l.qty ? ' (some)' : ''}</span>` : ''}
+        </div>${l.figs?.length ? `<div class="pmeta">${esc(l.figs.join(', '))}</div>` : ''}
       </div>
       <div class="qty" aria-label="Quantity">${fmt(l.qty)}</div>
     </li>`;
@@ -498,9 +516,9 @@ async function refreshSet(rec) {
   try {
     const info = await rb.getSet(rec.set_num, key);
     const catMap = await ensureCategories(key);
-    const results = await rb.getSetParts(rec.set_num, key);
-    await storeSet(info, results, catMap, rec);
-    toast('Parts list refreshed.');
+    const dl = await downloadParts(rec.set_num, key);
+    await storeSet(info, dl.results, catMap, rec, dl.figs);
+    toast(dl.figError ? 'Parts list refreshed, but the minifigures could not be fetched.' : 'Parts list refreshed.');
     await renderSet(rec.set_num);
   } catch (e) {
     toast(e.message || 'Refresh failed.');
@@ -568,6 +586,13 @@ async function renderSettings() {
       <p class="hint">Sets, bins and sorted pieces are backed up. Parts lists are fetched again from Rebrickable on a new device. Your Rebrickable key is never sent to the sheet.</p>
     </section>
     <section class="panel">
+      <h2>Minifigures</h2>
+      <label class="check"><input type="checkbox" id="includeFigs"> Include minifigure parts in sets</label>
+      <p class="hint">Adds each set's minifigure heads, torsos, legs and accessories to its parts list. Adding a set takes longer.</p>
+      <button type="button" class="btn block" id="addFigsAll">Add minifigures to my existing sets</button>
+      <p class="hint" id="figsNote"></p>
+    </section>
+    <section class="panel">
       <h2>Storage sorting</h2>
       <p class="hint">Where pieces are stored when no active set needs them.</p>
       <details class="rules" id="rules"><summary>Storage rules</summary><div id="rulesBody"></div></details>
@@ -623,6 +648,10 @@ async function renderSettings() {
   });
 
   await setupSyncPanel();
+  $('#includeFigs').checked = await includeFigs();
+  $('#includeFigs').addEventListener('change', async (e) => { await db.setSetting('includeFigs', e.target.checked); await paintFigsNote(); });
+  $('#addFigsAll').addEventListener('click', addFigsToAllSets);
+  await paintFigsNote();
   $('#exportSort').addEventListener('click', async () => {
     try { toast(await exportSorting(await bins.loadContext())); } catch (err) { toast(err.message || 'Could not export.'); }
   });
@@ -675,8 +704,8 @@ async function restoreMissingParts() {
     for (const s of missing) {
       toast(`Downloading parts for ${s.set_num} (${done + 1} of ${missing.length})…`);
       const info = await rb.getSet(s.set_num, key);
-      const results = await rb.getSetParts(s.set_num, key);
-      await storeSet(info, results, catMap, s);
+      const dl = await downloadParts(s.set_num, key);
+      await storeSet(info, dl.results, catMap, s, dl.figs);
       done++;
     }
     toast(`Restored ${done} ${done === 1 ? 'set' : 'sets'}.`);
@@ -686,6 +715,46 @@ async function restoreMissingParts() {
     restoring = false;
   }
   return done;
+}
+
+const setsWithoutFigs = async () => (await db.all('sets')).filter((x) => !x.deleted && !x.figs_at);
+
+async function paintFigsNote() {
+  const n = (await setsWithoutFigs()).length;
+  const el = $('#figsNote');
+  if (!el) return;
+  el.textContent = n ? `${n} of your sets ${n === 1 ? "doesn't" : "don't"} have minifigure parts yet.` : 'All your sets include their minifigure parts.';
+  $('#addFigsAll').hidden = !n;
+}
+
+// Re-downloads each set that lacks its minifigure parts. Pieces you have already sorted are not touched.
+let addingFigs = false;
+async function addFigsToAllSets() {
+  if (addingFigs) return;
+  const key = await getKey();
+  if (!key) { toast('Add your Rebrickable key first.'); return; }
+  await db.setSetting('includeFigs', true);
+  if ($('#includeFigs')) $('#includeFigs').checked = true;
+  const todo = await setsWithoutFigs();
+  addingFigs = true;
+  const btn = $('#addFigsAll');
+  let done = 0;
+  try {
+    const catMap = await ensureCategories(key);
+    for (const s of todo) {
+      if (btn) { btn.disabled = true; btn.textContent = `Adding… ${done + 1} of ${todo.length}`; }
+      const info = await rb.getSet(s.set_num, key);
+      const dl = await downloadParts(s.set_num, key);
+      await storeSet(info, dl.results, catMap, s, dl.figs);
+      done++;
+    }
+    toast(`Added minifigure parts to ${done} ${done === 1 ? 'set' : 'sets'}.`);
+  } catch (e) {
+    toast(`Stopped after ${done}: ${e.message || e}`);
+  } finally {
+    addingFigs = false;
+    if (btn?.isConnected) { btn.disabled = false; btn.textContent = 'Add minifigures to my existing sets'; await paintFigsNote(); }
+  }
 }
 
 async function afterSync(r) {

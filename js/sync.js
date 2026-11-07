@@ -74,7 +74,7 @@ const scriptHasParts = async () => Number((await db.getSetting('scriptV')) || 0)
 // ---------- parts lists ----------
 
 const defaultImg = (pn, cid) => `https://cdn.rebrickable.com/media/parts/ldraw/${cid}/${encodeURIComponent(pn)}.png`;
-const packLine = (l) => [l.part_num, l.name, l.cat_id ?? null, l.color_id, l.qty, l.element_id || 0, l.sticker ? 1 : 0, l.img && l.img !== defaultImg(l.part_num, l.color_id) ? l.img : 0];
+const packLine = (l) => [l.part_num, l.name, l.cat_id ?? null, l.color_id, l.qty, l.element_id || 0, l.sticker ? 1 : 0, l.img && l.img !== defaultImg(l.part_num, l.color_id) ? l.img : 0, l.figs?.length ? [l.fig_qty || 0, ...l.figs] : 0];
 
 // A set's parts as chunk records, each small enough for one sheet cell.
 function chunkParts(setNum, at, rows) {
@@ -135,13 +135,14 @@ async function applyParts(recs) {
     if ((await db.byIndex('setParts', 'set_num', setNum)).length) continue; // already have it
     const lines = [];
     for (const r of mine.sort((a, b) => a.chunk - b.chunk)) {
-      for (const [part_num, name, cat_id, color_id, qty, element_id, sticker, img] of r.lines) {
+      for (const [part_num, name, cat_id, color_id, qty, element_id, sticker, img, fig] of r.lines) {
         const [cname, rgb, trans] = (r.colors && r.colors[color_id]) || [`Colour ${color_id}`, '999999', 0];
         lines.push({
           id: `${setNum}|${part_num}|${color_id}`, set_num: setNum, part_num, name, cat_id,
           cat_name: (r.cats && r.cats[cat_id]) || 'Other', img: img || null, color_id,
           color_name: cname, rgb: /^[0-9a-f]{6}$/i.test(rgb || '') ? rgb : '999999',
           is_trans: !!trans, qty, element_id: element_id || null, sticker: !!sticker,
+          ...(Array.isArray(fig) ? { fig_qty: fig[0], figs: fig.slice(1) } : {}),
         });
       }
     }

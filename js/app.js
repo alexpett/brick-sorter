@@ -4,6 +4,7 @@ import * as refdata from './data.js';
 import * as swatchLib from './swatch.js';
 import { pickColor, refreshInfo as refreshSorterInfo } from './screens/sorter.js';
 import { setPicture } from './setpic.js';
+import { loadThemes, rootTheme, backfillThemeIds } from './themes.js';
 import * as bins from './bins.js';
 import * as sync from './sync.js';
 import { $, view, esc, decode, fmt, ago, safeRgb, setTitle, toast, openDialog, ask } from './ui.js';
@@ -205,11 +206,15 @@ async function renderSets() {
       <div id="setList"></div>
     </section>`;
   await refreshSetList();
+  // Quietly learn each set's theme so the Theme filter fills itself in.
+  loadThemes().then(() => backfillThemeIds()).then(() => refreshSetList()).catch(() => {});
 }
 
 // Search and filter on the Sets page (kept while you move around the app).
 let setQuery = '';
 const setStates = new Set(); // 'pieces' | 'building' | 'complete'; empty means all
+const setThemes = new Set(); // top-level theme names (Harry Potter, ...); empty means all
+const OTHER_THEME = 'Other';
 const STATE_LABEL = { pieces: 'In pieces', building: 'Building', complete: 'Complete' };
 
 function setState(a) {
@@ -217,7 +222,14 @@ function setState(a) {
   return a.neededTotal > 0 && a.heldTotal >= a.neededTotal ? 'complete' : 'building';
 }
 
+// The theme a set shows under: its top-level theme, or Other when Rebrickable has not told us yet.
+const themeOf = (themes, s) => (s.theme_id != null && rootTheme(themes, s.theme_id)) || OTHER_THEME;
+
 async function findSetsDialog() {
+  const themes = await loadThemes();
+  const counts = new Map();
+  for (const s of (await db.all('sets')).filter((x) => !x.deleted)) { const t = themeOf(themes, s); counts.set(t, (counts.get(t) || 0) + 1); }
+  const themeNames = [...counts.keys()].sort((a, b) => (a === OTHER_THEME) - (b === OTHER_THEME) || a.localeCompare(b));
   const { value, data } = await openDialog(`
     <h2>Search sets</h2>
     <label for="sq">Name or set number</label>
@@ -227,15 +239,21 @@ async function findSetsDialog() {
       <label class="statechip"><input type="checkbox" name="state" value="${k}"${setStates.has(k) ? ' checked' : ''}><span>${v}</span></label>`).join('')}
     </div>
     <p class="hint">Leave all three unticked to see every set.</p>
+    ${themeNames.length > 1 ? `<label>Theme</label>
+    <div class="statechips">${themeNames.map((t) => `
+      <label class="statechip"><input type="checkbox" name="theme" value="${esc(t)}"${setThemes.has(t) ? ' checked' : ''}><span>${esc(t)} (${counts.get(t)})</span></label>`).join('')}
+    </div>` : ''}
     <div class="row spread">
       <button class="btn" value="clear" formnovalidate>Clear</button>
       <button class="btn primary" value="apply">Show sets</button>
     </div>`, { data: true });
-  if (value === 'clear') { setQuery = ''; setStates.clear(); }
+  if (value === 'clear') { setQuery = ''; setStates.clear(); setThemes.clear(); }
   else if (value === 'apply') {
     setQuery = String(data.get('q') || '').trim();
     setStates.clear();
     for (const v of data.getAll('state')) setStates.add(v);
+    setThemes.clear();
+    for (const v of data.getAll('theme')) setThemes.add(v);
   } else return;
   await refreshSetList();
 }
@@ -248,10 +266,12 @@ async function refreshSetList() {
   const activeBy = new Map((await bins.loadContext()).active.map((a) => [a.set.set_num, a]));
   if (!el.isConnected || !$('#listTitle')) return; // the screen changed while we were loading
   const words = setQuery.toLowerCase().split(/\s+/).filter(Boolean);
-  const filtering = words.length > 0 || setStates.size > 0;
+  const themes = await loadThemes({ fetchIfMissing: false });
+  const filtering = words.length > 0 || setStates.size > 0 || setThemes.size > 0;
   const sets = all.filter((s) => {
     const hay = `${decode(s.name || '')} ${s.set_num}`.toLowerCase();
-    return words.every((w) => hay.includes(w)) && (!setStates.size || setStates.has(setState(activeBy.get(s.set_num))));
+    return words.every((w) => hay.includes(w)) && (!setStates.size || setStates.has(setState(activeBy.get(s.set_num))))
+      && (!setThemes.size || setThemes.has(themeOf(themes, s)));
   });
   $('#listTitle').textContent = all.length ? (filtering ? `Your sets (${sets.length} of ${all.length})` : `Your sets (${all.length})`) : 'Your sets';
   $('#showAdd').hidden = !all.length;
@@ -259,7 +279,7 @@ async function refreshSetList() {
   const line = $('#filterLine');
   line.hidden = !filtering || !all.length;
   if (!line.hidden) {
-    const parts = [...(words.length ? [`“${esc(setQuery)}”`] : []), ...[...setStates].map((k) => STATE_LABEL[k])];
+    const parts = [...(words.length ? [`“${esc(setQuery)}”`] : []), ...[...setStates].map((k) => STATE_LABEL[k]), ...[...setThemes].map((t) => esc(t))];
     line.innerHTML = `Showing ${parts.join(' · ')} <button type="button" class="linkbtn" id="clearFind">Clear</button>`;
   }
   const addTile = '<button type="button" class="addsettile" id="addTile">+ Add set</button>';
@@ -931,7 +951,7 @@ view.addEventListener('error', (e) => {
 view.addEventListener('click', async (e) => {
   if (e.target.closest('#showAdd, #addTile')) showAddDialog();
   else if (e.target.closest('#findSets')) await findSetsDialog();
-  else if (e.target.closest('#clearFind, #clearFind2')) { setQuery = ''; setStates.clear(); await refreshSetList(); }
+  else if (e.target.closest('#clearFind, #clearFind2')) { setQuery = ''; setStates.clear(); setThemes.clear(); await refreshSetList(); }
 });
 
 // "Add sets" in a pop-up. It stays open while sets download, so the progress lines stay visible.

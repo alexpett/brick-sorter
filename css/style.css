@@ -722,3 +722,9 @@ li.part .pinfo { min-width: 0; }
 
 a.btn { text-decoration: none; display: inline-flex; align-items: center; justify-content: center; }
 a.btn.primary { color: var(--accent-ink); }
+
+.searchrow { display: flex; gap: 8px; align-items: center; }
+.searchrow input { flex: 1; min-width: 0; }
+.searchrow .btn { flex: none; min-height: 44px; }
+#scanRoot .searchrow #q { margin-bottom: 0; }
+#scanRoot .filterline { margin: 6px 0 0; }

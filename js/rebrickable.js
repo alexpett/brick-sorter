@@ -127,3 +127,8 @@ export async function findByBricklink(id, key) {
 export function getCategories(key) {
   return allPages('/part_categories/', { page_size: 1000 }, key);
 }
+
+// Every LEGO theme (Harry Potter, Friends, ...) with its parent, so a set's theme_id can be turned into a name.
+export function getThemes(key) {
+  return allPages('/themes/', { page_size: 1000 }, key);
+}

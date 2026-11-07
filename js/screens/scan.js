@@ -14,6 +14,7 @@ let sorter = null;
 let lastItems = [];
 let results = []; // typed-search results
 let query = '';
+let typeFilter = null; // part category id chosen in the Filter dialog (null = every type)
 const resolved = new Map(); // brickognize id (lower) -> part | null, filled by lookups
 
 export function stopCamera() {
@@ -24,7 +25,7 @@ export function stopCamera() {
 const $r = (sel) => root?.querySelector(sel);
 
 export async function renderScan() {
-  setTitle('Log pieces');
+  setTitle('Log bricks');
   busy = false;
   lastItems = [];
   try { await refdata.loadRef(); } catch (e) {
@@ -107,8 +108,12 @@ function drawSearch() {
   const m = $r('#matches');
   m.hidden = false;
   m.innerHTML = `
-    <h2><label for="q">Describe your piece</label></h2>
-    <input id="q" type="search" placeholder="e.g. brick, plate, tile etc" autocomplete="off" autocapitalize="off" spellcheck="false">
+    <h2><label for="q">Describe your brick</label></h2>
+    <div class="searchrow">
+      <input id="q" type="search" placeholder="e.g. brick, plate, tile etc" autocomplete="off" autocapitalize="off" spellcheck="false">
+      <button type="button" class="btn lozenge${typeFilter == null ? '' : ' primary'}" id="logFilter" aria-label="Filter by type of brick">Filter</button>
+    </div>
+    ${typeFilter == null ? '' : `<p class="hint filterline">Showing ${esc(refdata.categoryName(typeFilter))} <button type="button" class="linkbtn" id="logFilterClear">Clear</button></p>`}
     <div id="results" aria-live="polite"></div>
     <button class="btn block" id="unrec" type="button">I can’t identify this brick</button>`;
   $r('#q').value = query;
@@ -119,7 +124,7 @@ function drawResults() {
   const el = $r('#results');
   if (!el) return;
   if (!query.trim()) { results = []; el.innerHTML = '<p class="hint">Parts from your sets are listed first.</p>'; return; }
-  results = refdata.searchParts(query, info.yours, 40);
+  results = (typeFilter == null ? refdata.searchParts(query, info.yours, 40) : refdata.searchParts(query, info.yours, 4000).filter((p) => p.cat_id === typeFilter).slice(0, 40));
   if (!results.length) { el.innerHTML = '<p class="empty">No parts match.</p>'; return; }
   el.innerHTML = `<ul class="parts results">${results.map((p, i) => `
     <li><button type="button" class="result" data-pick="${i}">
@@ -136,7 +141,25 @@ async function select(part) {
   window.scrollTo(0, 0); // keep the photo in view above the sorting panel
 }
 
+async function typeFilterDialog() {
+  const cats = [...refdata.ref.categories].sort((a, b) => a[1].localeCompare(b[1]));
+  const { value, data } = await openDialog(`
+    <h2>Filter by type</h2>
+    <label for="lt">Type of brick</label>
+    <select id="lt" name="cat"><option value="">Every type</option>${cats.map(([id, name]) => `<option value="${id}"${id === typeFilter ? ' selected' : ''}>${esc(name)}</option>`).join('')}</select>
+    <div class="row spread">
+      <button class="btn" value="cancel" formnovalidate>Cancel</button>
+      <button class="btn primary" value="apply">Apply</button>
+    </div>`, { data: true });
+  if (value !== 'apply') return;
+  const v = String(data.get('cat') || '');
+  typeFilter = v === '' ? null : Number(v);
+  drawSearch();
+}
+
 async function onClick(e) {
+  if (e.target.closest('#logFilter')) { await typeFilterDialog(); return; }
+  if (e.target.closest('#logFilterClear')) { typeFilter = null; drawSearch(); return; }
   if (e.target.closest('#descBtn')) {
     if ($r('#shutter').classList.contains('again') || !$r('#q')) showLive();
     const q = $r('#q'); q.scrollIntoView({ block: 'center', behavior: 'smooth' }); q.focus();

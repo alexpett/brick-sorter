@@ -114,7 +114,7 @@ export async function renderHome() {
     </section>
     ${today}
     <section class="quick">
-      <a class="btn primary block" href="#/add">Log pieces</a>
+      <a class="btn primary block" href="#/add">Log bricks</a>
     </section>
     ${rows ? `<section><h2 class="section-title">In progress</h2><ul class="cards">${rows}</ul></section>` : `
     <section class="panel"><p class="empty">${setsAdded ? 'Open a set and choose “Start build” to give it a bin.' : 'Add a set to get started.'} <a href="#/sets">Go to Sets</a></p></section>`}`;

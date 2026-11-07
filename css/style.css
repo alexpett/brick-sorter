@@ -680,3 +680,7 @@ ul.parts[hidden] { display: none; }
 .pickstep input { width: 42px; height: 44px; }
 .tag.sm { font-size: 0.64rem; padding: 0 4px; letter-spacing: -0.01em; }
 li.part .pinfo { min-width: 0; }
+
+/* Colour Wall tiles: the same plan-view plate as the Swatch */
+.cswatch .swatch.lg { position: relative; width: 44px; height: 44px; border-radius: 10px; box-shadow: inset 0 0 0 1px rgba(0,0,0,.12); }
+.cswatch .swatch.lg::after { content: ""; position: absolute; inset: 24%; border-radius: 50%; border: 2px solid rgba(0,0,0,.22); background: radial-gradient(circle at 32% 30%, rgba(255,255,255,.5), rgba(255,255,255,0) 55%); box-shadow: 0 1px 0 rgba(255,255,255,.25); }

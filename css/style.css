@@ -682,5 +682,11 @@ ul.parts[hidden] { display: none; }
 li.part .pinfo { min-width: 0; }
 
 /* Colour Wall tiles: the same plan-view plate as the Swatch */
-.cswatch .swatch.lg { position: relative; width: 44px; height: 44px; border-radius: 10px; box-shadow: inset 0 0 0 1px rgba(0,0,0,.12); }
-.cswatch .swatch.lg::after { content: ""; position: absolute; inset: 24%; border-radius: 50%; border: 2px solid rgba(0,0,0,.22); background: radial-gradient(circle at 32% 30%, rgba(255,255,255,.5), rgba(255,255,255,0) 55%); box-shadow: 0 1px 0 rgba(255,255,255,.25); }
+.cswatch .swatch.lg, .colorbtn.tile .swatch.lg { position: relative; width: 44px; height: 44px; border-radius: 10px; box-shadow: inset 0 0 0 1px rgba(0,0,0,.12); }
+.cswatch .swatch.lg::after, .colorbtn.tile .swatch.lg::after { content: ""; position: absolute; inset: 24%; border-radius: 50%; border: 2px solid rgba(0,0,0,.22); background: radial-gradient(circle at 32% 30%, rgba(255,255,255,.5), rgba(255,255,255,0) 55%); box-shadow: 0 1px 0 rgba(255,255,255,.25); }
+
+/* The chosen colour on the sorting panel: a plate above its name, like the Colour Wall tiles */
+.colorbtn.tile { flex: 0 0 108px; flex-direction: column; justify-content: center; gap: 4px; padding: 8px 4px; text-align: center; background: var(--surface); }
+.colorbtn.tile .swatch.lg { flex: none; }
+.colorbtn.tile span:last-child { font-size: 0.75rem; line-height: 1.15; font-weight: 600; white-space: normal; overflow-wrap: anywhere; text-overflow: clip; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.cqrow:has(.colorbtn.tile) { justify-content: space-between; }

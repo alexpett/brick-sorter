@@ -330,7 +330,7 @@ export function createSorter(el, { onSaved, onChangePart, onUndo } = {}) {
         <button class="btn small" id="changePart" type="button">Change</button>
       </div>
       <div class="cqrow">
-        <button type="button" class="colorbtn${cur ? '' : ' empty'}" id="colorBtn" aria-label="Colour">
+        <button type="button" class="colorbtn${cur ? ' tile' : ' empty'}" id="colorBtn" aria-label="Colour">
           ${cur ? `${swatchHtml(cur, ' lg')}<span>${esc(cur.name)}</span>` : '<span>Choose a colour</span>'}
         </button>
         <div class="stepper" role="group" aria-label="Quantity">

@@ -3,6 +3,7 @@ import * as db from '../db.js';
 import * as refdata from '../data.js';
 import * as bins from '../bins.js';
 import { view, esc, fmt, toast, openDialog, ask, setTitle, safeRgb, stepperHtml } from '../ui.js';
+import { orderDialog } from '../order.js';
 import { celebrate } from '../rewards.js';
 import { pickColor, refreshInfo, loadColorState } from './sorter.js';
 
@@ -244,8 +245,10 @@ export async function renderBin(id, keepMode = false) {
     const a = ctx.active.find((x) => x.bin.id === bin.id);
     const pct = a ? Math.round(a.frac * 100) : 0;
     const img = a?.set.img || null;
+    const ico = (d) => `<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
     head = `
-      <section class="panel">
+      <section class="panel binpanel">
+        <button type="button" class="iconbtn editbtn" id="binColor" aria-label="Edit bin">${ico('<path d="M4 20l1-4L16.5 4.5a2.1 2.1 0 013 3L8 19z"/><path d="M14 7l3 3"/>')}</button>
         <div class="binhead">
           <div class="setpic" style="--p:${pct / 100}" role="img" aria-label="${pct}% complete">
             ${img ? `<img src="${esc(img)}" alt="">` : ''}
@@ -256,7 +259,10 @@ export async function renderBin(id, keepMode = false) {
             <p class="cardmeta">${esc(bin.set_num)}${a ? `<br>${fmt(a.heldTotal)} of ${fmt(a.neededTotal)} pieces` : ''}</p>
           </div>
         </div>
-        <div class="actions spaced"><button class="btn" id="binColor">Bin colour</button><button class="btn danger" id="abandon">Abandon this bin</button></div>
+        <div class="binfoot">
+          <button type="button" class="btn" id="createOrder">Create order</button>
+          <button type="button" class="iconbtn trash" id="abandon" aria-label="Abandon this bin">${ico('<path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14M10 10v6M14 10v6"/>')}</button>
+        </div>
       </section>`;
   } else if (!isAll) {
     head = `
@@ -463,6 +469,7 @@ export async function renderBin(id, keepMode = false) {
   $('#editBin')?.addEventListener('click', async () => { await editBinDialog(bin, ctx, lines); await renderBin(id, true); });
   $('#openBtn')?.addEventListener('click', () => setFull(false));
   $('#fullBtn')?.addEventListener('click', () => setFull(true));
+  $('#createOrder')?.addEventListener('click', async () => { const set = ctx.setsByNum.get(bin.set_num) || (await db.get('sets', bin.set_num)); if (set) await orderDialog({ set, missing }); });
   $('#abandon')?.addEventListener('click', async () => {
     if (await confirmAbandon(bin.id)) location.hash = '#/bins';
   });

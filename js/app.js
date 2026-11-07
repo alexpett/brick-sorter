@@ -3,6 +3,7 @@ import * as rb from './rebrickable.js';
 import * as refdata from './data.js';
 import * as swatchLib from './swatch.js';
 import { pickColor, refreshInfo as refreshSorterInfo } from './screens/sorter.js';
+import { setPicture } from './setpic.js';
 import * as bins from './bins.js';
 import * as sync from './sync.js';
 import { $, view, esc, decode, fmt, ago, safeRgb, setTitle, toast, openDialog, ask } from './ui.js';
@@ -270,10 +271,12 @@ async function refreshSetList() {
     el.innerHTML = `<p class="empty">No sets match. <button type="button" class="linkbtn" id="clearFind2">Clear the search</button></p>${addTile}`;
     return;
   }
+  const pics = new Map(await Promise.all(sets.map(async (s) => [s.set_num, await setPicture(s)])));
+  if (!el.isConnected) return;
   el.innerHTML = `<ul class="cards">${sets.map((s) => `
     <li>
       <a class="card" href="#/set/${encodeURIComponent(s.set_num)}">
-        <div class="setimg">${s.img ? `<img src="${esc(s.img)}" alt="" loading="lazy">` : ''}</div>
+        ${pics.get(s.set_num)}
         <div class="cardtext">
           <div class="cardname">${esc(s.name)}</div>
           <div class="cardmeta">${esc(s.set_num)} · ${esc(s.year)} · ${fmt(s.pieces)} bricks</div>
@@ -386,7 +389,7 @@ async function renderSet(setNum) {
   const rec = await db.get('sets', setNum);
   if (!rec || rec.deleted) {
     setTitle('Set not found');
-    view.innerHTML = '<p class="empty">That set isn’t in your list. <a href="#/sets">Back to sets</a></p>';
+    view.innerHTML = '<p class="empty">That set isn’t in your list. <a href="#/sets">Back to Sets</a></p>';
     return;
   }
   setTitle(rec.name);
@@ -395,9 +398,9 @@ async function renderSet(setNum) {
     || String(a.color_name).localeCompare(String(b.color_name)));
 
   view.innerHTML = `
-    <a class="backlink" href="#/sets">‹ All sets</a>
+    <a class="backlink" href="#/sets">‹ Sets</a>
     <section class="panel hero">
-      <div class="setimg big">${rec.img ? `<img src="${esc(rec.img)}" alt="">` : ''}</div>
+      ${await setPicture(rec, 'setimg big')}
       <div>
         <h2 class="setname">${esc(rec.name)}</h2>
         <p class="cardmeta">${esc(rec.set_num)} · ${esc(rec.year)}</p>

@@ -21,7 +21,7 @@ const colorOf = (id) => refdata.ref.colorById.get(id);
 // The colour that stands for a set: the one with most bricks, unless that is black, white or grey and a
 // real colour makes up a fair share of the set, in which case that colour.
 const NEUTRAL = (c) => c.id === 0 || c.id === 15 || /gr[ae]y|^black$|^white$/i.test(c.name || '');
-function dominantColour(list) {
+export function dominantColour(list) {
   const total = list.reduce((n, c) => n + c.n, 0) || 1;
   const sorted = [...list].sort((a, b) => b.n - a.n);
   let pick = sorted[0];

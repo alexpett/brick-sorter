@@ -4,6 +4,7 @@ import * as refdata from '../data.js';
 import * as bins from '../bins.js';
 import { view, esc, fmt, toast, openDialog, ask, setTitle, safeRgb, stepperHtml } from '../ui.js';
 import { orderDialog } from '../order.js';
+import { BRICK_ICON, placeholderColour } from '../setpic.js';
 import { celebrate } from '../rewards.js';
 import { pickColor, refreshInfo, loadColorState } from './sorter.js';
 
@@ -238,6 +239,7 @@ export async function renderBin(id, keepMode = false) {
     listEl.replaceChildren(out);
   };
   const pickCount = missing.filter((m) => m.avail > 0).length;
+  const pickBricks = missing.reduce((n, m) => n + (m.avail > 0 ? Math.min(m.rem, m.avail) : 0), 0);
   const missingCount = missing.reduce((n, l) => n + l.rem, 0);
   setTitle(isAll ? 'All bricks' : bin.type === 'active' ? `Bin ${bin.number}` : bin.label);
 
@@ -251,8 +253,8 @@ export async function renderBin(id, keepMode = false) {
       <section class="panel binpanel">
         <button type="button" class="iconbtn editbtn" id="binColor" aria-label="Edit bin">${ico('<path d="M4 20l1-4L16.5 4.5a2.1 2.1 0 013 3L8 19z"/><path d="M14 7l3 3"/>')}</button>
         <div class="binhead">
-          <div class="setpic" style="--p:${pct / 100}" role="img" aria-label="${pct}% complete">
-            ${img ? `<img src="${esc(img)}" alt="">` : ''}
+          <div class="setpic${img ? '' : ' nopic'}" style="--p:${pct / 100};--c:${await placeholderColour(bin.set_num)}" role="img" aria-label="${pct}% complete">
+            ${img ? `<img src="${esc(img)}" alt="">` : BRICK_ICON}
             <span class="pctbadge" aria-hidden="true">${pct}%</span>
           </div>
           <div class="binhead-text">
@@ -292,9 +294,9 @@ export async function renderBin(id, keepMode = false) {
         <button type="button" role="tab" data-mode="missing" aria-selected="${binMode === 'missing'}">Missing (${fmt(missingCount)})</button>
         <button type="button" role="tab" data-mode="found" aria-selected="${binMode === 'found'}">Found (${fmt(partCount(lines))})</button>
  </div>
-      ${binMode === 'missing' && pickCount ? `<button type="button" class="chip pickchip" id="pickToggle" aria-pressed="${pickOnly}">In storage: ${fmt(pickCount)} ${pickCount === 1 ? 'part' : 'parts'} to pick</button>` : ''}` : ''}
-      ${!isActive && wantedCount ? `<button type="button" class="chip pickchip" id="neededToggle" aria-pressed="${neededOnly}">Wanted by active sets: ${fmt(wantedCount)} ${wantedCount === 1 ? 'line' : 'lines'}</button>` : ''}
-      ${(() => { const n = (!isAll && bin.type === 'storage' && bins.binPalette(bin).length) ? lines.filter((l) => !bins.acceptsColour(bin, l.color_id)).length : 0; return n ? `<button type="button" class="chip pickchip" id="offToggle" aria-pressed="${offOnly}">Outside this bin’s colour rule: ${fmt(n)} ${n === 1 ? 'line' : 'lines'}</button>` : ''; })()}
+      ${binMode === 'missing' && pickCount ? `<button type="button" class="chip pickchip" id="pickToggle" aria-pressed="${pickOnly}">Bricks to pick: ${fmt(pickBricks)}</button>` : ''}` : ''}
+      ${!isActive && wantedCount ? `<button type="button" class="chip pickchip" id="neededToggle" aria-pressed="${neededOnly}">Wanted by active sets: ${fmt(wantedCount)} ${wantedCount === 1 ? 'kind' : 'kinds'}</button>` : ''}
+      ${(() => { const n = (!isAll && bin.type === 'storage' && bins.binPalette(bin).length) ? lines.filter((l) => !bins.acceptsColour(bin, l.color_id)).length : 0; return n ? `<button type="button" class="chip pickchip" id="offToggle" aria-pressed="${offOnly}">Outside this bin’s colour rule: ${fmt(n)} ${n === 1 ? 'kind' : 'kinds'}</button>` : ''; })()}
       <label for="filter" class="sr">Filter bricks</label>
       <input id="filter" type="search" placeholder="Search name, part no. or colour" autocomplete="off">
       <div class="colorfilter" id="colorChips"></div>
@@ -350,7 +352,7 @@ export async function renderBin(id, keepMode = false) {
               ${from ? '<br>' : ''}<span class="swatch${l.is_trans ? ' trans' : ''}" style="--c:#${esc(l.rgb)}"></span>
               ${esc(l.color_name)}${from ? '' : ` · ${esc(l.part_num)}`}${l.sticker ? ' <span class="tag">sticker</span>' : ''}
               ${l.have && !from ? `<br>Have ${fmt(l.have)} of ${fmt(l.qty)}` : ''}
-              ${l.avail ? (from ? `<br><span class="tag sm ${from.qty >= l.rem ? 'ok' : 'bad'}">${fmt(from.qty)} available · ${fmt(l.rem)} required</span>` : `<br><span class="tag ok">In storage: ${fmt(l.avail)} · ${esc([...new Set(l.stock.map((x) => x.bin.label))].join(', '))}</span>`) : ''}
+              ${l.avail ? (from ? `<br><span class="tag sm ${from.qty >= l.rem ? 'ok' : 'bad'}">${fmt(from.qty)} available · ${fmt(l.rem)} required</span>` : `<br><span class="tag ${l.avail >= l.rem ? 'ok' : 'warn'}">In storage: ${fmt(l.avail)} · ${esc([...new Set(l.stock.map((x) => x.bin.label))].join(', '))}</span>`) : ''}
             </span>
           </span>
           ${from ? '' : `<span class="qty">${fmt(l.rem)}</span>`}
@@ -406,7 +408,7 @@ export async function renderBin(id, keepMode = false) {
               <span class="swatch${/^Trans/i.test(l.color_name) ? ' trans' : ''}" style="--c:#${esc(l.rgb)}"></span>
               ${esc(l.color_name)}${l.part_num ? ` · ${esc(l.part_num)}` : ''}${tagsHtml(l)}${b ? ` · ${esc(b.type === 'active' ? `Bin ${b.number}` : b.label)}` : ''}
               ${l.note ? `<br><em>${esc(l.note)}</em>` : ''}
-              ${wants.length ? `<br><span class="tag ok">Wanted: ${wants.map((w) => `Bin ${w.bin.number} (${fmt(w.rem)})`).join(', ')}</span>` : ''}
+              ${wants.length ? `<br><span class="tag warn">Wanted: ${wants.map((w) => `Bin ${w.bin.number} (${fmt(w.rem)})`).join(', ')}</span>` : ''}
             </span>
           </span>
           <span class="qty">${fmt(l.qty)}</span>

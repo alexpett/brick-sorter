@@ -21,14 +21,14 @@ export async function prepare(source, max = 1024, crop = null) {
   c.height = Math.max(1, Math.round(r.h * k));
   c.getContext('2d').drawImage(bmp, r.x, r.y, r.w, r.h, 0, 0, c.width, c.height);
   const blob = await new Promise((res) => c.toBlob(res, 'image/jpeg', 0.85));
-  if (!blob) throw new Error("Couldn't prepare the photo.");
+  if (!blob) throw new Error("Couldn’t prepare the photo.");
   return { blob, canvas: c };
 }
 
 const toBase64 = (blob) => new Promise((res, rej) => {
   const r = new FileReader();
   r.onload = () => res(String(r.result).split(',')[1] || '');
-  r.onerror = () => rej(new Error("Couldn't read the photo."));
+  r.onerror = () => rej(new Error("Couldn’t read the photo."));
   r.readAsDataURL(blob);
 });
 
@@ -63,15 +63,15 @@ export async function identify(blob) {
       const r = await sync.callScript({ action: 'recognise', image: await toBase64(blob) });
       return { items: normalise(r.result), via: 'script' };
     } catch (e) {
-      throw new Error(`Couldn't identify the photo (${e.message}). If you set up the Google script before the camera was added, update it from the apps-script folder and redeploy.`);
+      throw new Error(`Couldn’t identify the photo (${e.message}). If you set up the Google script before the camera was added, update it from the apps-script folder and redeploy.`);
     }
   }
   void direct;
-  throw new Error("Couldn't reach Brickognize from the browser. Setting up Google Sheet backup in Settings lets the app send the photo through your Google script instead.");
+  throw new Error("Couldn’t reach Brickognize from the browser. Setting up Google Sheet backup in Settings lets the app send the photo through your Google script instead.");
 }
 
 // The part of a playing <video> that is actually visible inside its box when it is shown with
-// object-fit: cover (the rest is cut off), in the video's own pixels.
+// object-fit: cover (the rest is cut off), in the video’s own pixels.
 export function visibleCrop(video) {
   const vw = video.videoWidth;
   const vh = video.videoHeight;

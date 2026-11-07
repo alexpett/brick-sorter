@@ -1,5 +1,5 @@
 // Goals, streaks and badges for the household. Everything is worked out from the activity log
-// (one entry per save) and the pieces already sorted; badges are never stored as "earned",
+// (one entry per save) and the bricks already sorted; badges are never stored as "earned",
 // only which ones have been celebrated already.
 import * as db from './db.js';
 import * as bins from './bins.js';
@@ -56,11 +56,11 @@ export async function loadStats(ctx = null, now = new Date()) {
 }
 
 export const BADGES = [
-  ...MILESTONES.slice(0, 6).map((n, i) => ({ id: `pieces${n}`, icon: ['🧱', '🔩', '🥉', '🥈', '🥇', '👑'][i], name: `${fmt(n)} pieces`, desc: `Sort ${fmt(n)} pieces in total`, ok: (s) => s.total >= n })),
+  ...MILESTONES.slice(0, 6).map((n, i) => ({ id: `pieces${n}`, icon: ['🧱', '🔩', '🥉', '🥈', '🥇', '👑'][i], name: `${fmt(n)} bricks`, desc: `Sort ${fmt(n)} bricks in total`, ok: (s) => s.total >= n })),
   { id: 'goal1', icon: '🎯', name: 'On target', desc: 'Reach the daily goal once', ok: (s) => s.goalDays >= 1 },
   { id: 'goal5', icon: '🔥', name: 'Goal getter', desc: 'Reach the daily goal on 5 days', ok: (s) => s.goalDays >= 5 },
   { id: 'double', icon: '⚡', name: 'Double trouble', desc: 'Sort twice the daily goal in one day', ok: (s) => s.bestDay >= 2 * s.goal },
-  { id: 'big250', icon: '🚀', name: 'Big day', desc: 'Sort 250 pieces in one day', ok: (s) => s.bestDay >= 250 },
+  { id: 'big250', icon: '🚀', name: 'Big day', desc: 'Sort 250 bricks in one day', ok: (s) => s.bestDay >= 250 },
   { id: 'streak3', icon: '📅', name: '3-day streak', desc: 'Sort something 3 days in a row', ok: (s) => s.best >= 3 },
   { id: 'streak7', icon: '🌟', name: 'Week streak', desc: 'Sort something 7 days in a row', ok: (s) => s.best >= 7 },
   { id: 'streak30', icon: '🏆', name: 'Month streak', desc: 'Sort something 30 days in a row', ok: (s) => s.best >= 30 },
@@ -70,14 +70,14 @@ export const BADGES = [
 
 export const earnedIds = (s) => BADGES.filter((b) => b.ok(s)).map((b) => b.id);
 
-// Next total-pieces milestone and how far through it you are.
+// Next total-bricks milestone and how far through it you are.
 export function nextMilestone(total) {
   const next = MILESTONES.find((m) => m > total) || null;
   const prev = [...MILESTONES].reverse().find((m) => m <= total) || 0;
   return { next, prev, pct: next ? Math.round(((total - prev) / (next - prev)) * 100) : 100 };
 }
 
-// Works out what is newly earned since last time (and whether today's goal was just reached).
+// Works out what is newly earned since last time (and whether today’s goal was just reached).
 // The very first call records what already exists without celebrating it.
 export async function checkNew() {
   const s = await loadStats();
@@ -105,7 +105,7 @@ export async function celebrate() {
   try { r = await checkNew(); } catch { return; }
   if (!r.badges.length && !r.goal) return;
   const lines = [];
-  if (r.goal) lines.push(`<p class="cel-line">🎯 <strong>Daily goal reached!</strong> ${fmt(r.stats.today)} pieces today.</p>`);
+  if (r.goal) lines.push(`<p class="cel-line">🎯 <strong>Daily goal reached!</strong> ${fmt(r.stats.today)} bricks today.</p>`);
   for (const b of r.badges) lines.push(`<p class="cel-line"><span class="cel-icon" aria-hidden="true">${b.icon}</span> <strong>${esc(b.name)}</strong><br><small>${esc(b.desc)}</small></p>`);
   await openDialog(`
     <h2>${r.badges.length ? 'New badge!' : 'Well done!'}</h2>

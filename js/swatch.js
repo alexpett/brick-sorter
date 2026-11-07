@@ -1,4 +1,4 @@
-// The Swatch: a picture of the user's physical colour plate (8 x 8 studs of 1 x 1 plates). Each square is a
+// The Swatch: a picture of the user’s physical colour plate (8 x 8 studs of 1 x 1 plates). Each square is a
 // colour id or null (an empty place on the plate). The layout is editable in Settings and synced.
 import * as db from './db.js';
 import * as refdata from './data.js';

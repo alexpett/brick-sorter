@@ -1,4 +1,4 @@
-// Scan: take one photo of one piece; the photo shows at the top, the likely matches below,
+// Scan: take one photo of one brick; the photo shows at the top, the likely matches below,
 // and choosing a match opens the sorting panel on the same screen. Saving returns to the camera.
 import * as refdata from '../data.js';
 import * as recog from '../recog.js';
@@ -28,7 +28,7 @@ export async function renderScan() {
   busy = false;
   lastItems = [];
   try { await refdata.loadRef(); } catch (e) {
-    view.innerHTML = `<section class="panel"><h2>Couldn't load the parts catalogue</h2><p>${esc(e.message)}</p></section>`;
+    view.innerHTML = `<section class="panel"><h2>Couldn’t load the parts catalogue</h2><p>${esc(e.message)}</p></section>`;
     return;
   }
   await refreshInfo();
@@ -110,7 +110,7 @@ function drawSearch() {
     <h2><label for="q">Describe your piece</label></h2>
     <input id="q" type="search" placeholder="e.g. brick, plate, tile etc" autocomplete="off" autocapitalize="off" spellcheck="false">
     <div id="results" aria-live="polite"></div>
-    <button class="btn block" id="unrec" type="button">I can’t identify this piece</button>`;
+    <button class="btn block" id="unrec" type="button">I can’t identify this brick</button>`;
   $r('#q').value = query;
   drawResults();
 }
@@ -156,7 +156,7 @@ async function onClick(e) {
   if (typed) { await select(results[Number(typed.dataset.pick)]); return; }
   const pick = e.target.closest('[data-part]');
   if (pick) { await select(JSON.parse(pick.dataset.part)); return; }
-  if (e.target.closest('#unrec')) { await select({ unrec: true, part_num: '', name: 'Unrecognised piece', cat_id: null }); return; }
+  if (e.target.closest('#unrec')) { await select({ unrec: true, part_num: '', name: 'Unrecognised brick', cat_id: null }); return; }
 }
 
 async function onFile(e) {
@@ -169,7 +169,7 @@ async function consent() {
   if (await recog.hasConsent()) return true;
   const v = await openDialog(`
     <h2>Send photos to Brickognize?</h2>
-    <p>To identify a piece, the photo is sent to the free Brickognize service. Their terms say uploaded photos may be stored and used to improve their models. Only the photo is sent, only when you press the button.</p>
+    <p>To identify a brick, the photo is sent to the free Brickognize service. Their terms say uploaded photos may be stored and used to improve their models. Only the photo is sent, only when you press the button.</p>
     <div class="row">
       <button class="btn" value="cancel" formnovalidate>Not now</button>
       <button class="btn primary" value="ok">OK, continue</button>
@@ -209,9 +209,9 @@ async function handle(source, crop = null) {
   }
 }
 
-const unrecButton = () => '<button class="btn block" id="unrec" type="button">I can’t identify this piece</button>';
+const unrecButton = () => '<button class="btn block" id="unrec" type="button">I can’t identify this brick</button>';
 
-// Items whose number isn't in the catalogue: ask Rebrickable which of its parts BrickLink calls that
+// Items whose number isn’t in the catalogue: ask Rebrickable which of its parts BrickLink calls that
 // (needs the API key), otherwise fall back to the closest local guess.
 async function resolveMissing(items) {
   const key = (await db.getSetting('rebrickableKey')) || '';
@@ -236,7 +236,7 @@ async function resolveMissing(items) {
 function drawMatches(items) {
   const matches = $r('#matches');
   if (!items.length) {
-    matches.innerHTML = `<p class="empty">No matches. Try again with the piece flatter, closer and on a plain background.</p>${unrecButton()}`;
+    matches.innerHTML = `<p class="empty">No matches. Try again with the brick flatter, closer and on a plain background.</p>${unrecButton()}`;
     return;
   }
   const rows = items.slice(0, 6).map((it) => {

@@ -49,7 +49,7 @@ async function call(path, params, key) {
     try {
       res = await fetch(url, { headers: { Accept: 'application/json' } });
     } catch {
-      throw new ApiError("Couldn't reach Rebrickable. Check your connection and try again.", 0, 'network');
+      throw new ApiError("Couldn’t reach Rebrickable. Check your connection and try again.", 0, 'network');
     }
     if (res.status === 429) {
       const secs = Math.min(60, await throttleSeconds(res));
@@ -102,9 +102,9 @@ export function getSetParts(setNum, key, onPage) {
   );
 }
 
-// The minifigures in a set, and the parts of each. Rebrickable keeps these apart from the set's own parts list.
+// The minifigures in a set, and the parts of each. Rebrickable keeps these apart from the set’s own parts list.
 // Returns results shaped like set parts, with each quantity already multiplied by the number of that figure,
-// and the figure's name in _fig.
+// and the figure’s name in _fig.
 export async function getSetFigureParts(setNum, key, onFigure) {
   const figs = await allPages(`/sets/${encodeURIComponent(setNum)}/minifigs/`, { page_size: 200 }, key);
   const out = [];

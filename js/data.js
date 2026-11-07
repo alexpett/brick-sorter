@@ -1,4 +1,4 @@
-// Bundled reference data (parts, colours, categories) built from Rebrickable's downloads.
+// Bundled reference data (parts, colours, categories) built from Rebrickable’s downloads.
 let loading = null;
 
 export const ref = {
@@ -13,7 +13,7 @@ export const ref = {
 
 async function getJson(url) {
   const res = await fetch(url);
-  if (!res.ok) throw new Error(`Couldn't load ${url} (${res.status}).`);
+  if (!res.ok) throw new Error(`Couldn’t load ${url} (${res.status}).`);
   return res.json();
 }
 
@@ -70,14 +70,14 @@ export function categoryName(id) {
   return ref.categories.get(id) || (id == null ? 'Other' : `Category ${id}`);
 }
 
-// Colours offered in the picker: everything except Rebrickable's placeholder entries.
+// Colours offered in the picker: everything except Rebrickable’s placeholder entries.
 export function pickerColors() {
   return ref.colors
     .filter((c) => c.id !== -1 && c.id !== 9999)
     .sort((a, b) => Number(a.is_trans) - Number(b.is_trans) || a.name.localeCompare(b.name));
 }
 
-// The scanner returns BrickLink numbers, which are not always Rebrickable's. Best local guess:
+// The scanner returns BrickLink numbers, which are not always Rebrickable’s. Best local guess:
 // drop the print suffix (87079pb0722L -> 87079) and try the usual letter variants (3069 -> 3069b).
 export function guessCatalogue(id) {
   const lower = String(id).toLowerCase();
@@ -90,7 +90,7 @@ export function guessCatalogue(id) {
   return null;
 }
 
-// Groups shown in the picker's "All" tab, in this order.
+// Groups shown in the picker’s "All" tab, in this order.
 export const COLOR_GROUPS = ['Black & white', 'Greys', 'Reds', 'Oranges & yellows', 'Greens', 'Blues', 'Pinks & purples', 'Browns', 'Metallic', 'Translucent'];
 
 export function colorGroup(c) {

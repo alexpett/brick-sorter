@@ -1,5 +1,5 @@
-// The piece-sorting panel shared by the Add and Scan screens: part, colour, quantity, flags
-// and the bin buttons. Tapping a bin saves the piece there.
+// The brick-sorting panel shared by the Add and Scan screens: part, colour, quantity, flags
+// and the bin buttons. Tapping a bin saves the brick there.
 import * as db from '../db.js';
 import * as refdata from '../data.js';
 import * as swatchLib from '../swatch.js';
@@ -18,7 +18,7 @@ let recent = [];
 
 const colorOf = (id) => refdata.ref.colorById.get(id);
 
-// The colour that stands for a set: the one with most pieces, unless that is black, white or grey and a
+// The colour that stands for a set: the one with most bricks, unless that is black, white or grey and a
 // real colour makes up a fair share of the set, in which case that colour.
 const NEUTRAL = (c) => c.id === 0 || c.id === 15 || /gr[ae]y|^black$|^white$/i.test(c.name || '');
 function dominantColour(list) {
@@ -86,7 +86,7 @@ export function thumb(partNum, cid) {
   return `<span class="thumb">${url ? `<img src="${esc(url)}" alt="" loading="lazy">` : ''}</span>`;
 }
 
-// Colours of this part that active sets still need, most pieces remaining first, ties alphabetical.
+// Colours of this part that active sets still need, most bricks remaining first, ties alphabetical.
 export function colourSuggestions(partNum) {
   const by = new Map();
   for (const e of info.neededBy.get(partNum) || []) {
@@ -118,13 +118,13 @@ async function chooseColor(id) {
 //  clearLabel- adds a button that resolves 'clear' (e.g. "Show all colours")
 // Resolves a colour id, an array (multi), 'clear', or null if cancelled.
 export function pickColor(current = colorId, { allOnly = false, only = null, multi = null, clearLabel = '', title = 'Colour Wall', swatch = false } = {}) {
-  swatch = swatch && !allOnly && !only && !multi; // the Swatch is for logging a piece, nothing else
+  swatch = swatch && !allOnly && !only && !multi; // the Swatch is for logging a brick, nothing else
   allOnly = allOnly || !!only || !!multi;
   return new Promise((resolve) => {
     const d = $('#dlg');
     let tab = allOnly ? 'all' : swatch && info.swatchFirst ? 'swatch' : recent.length ? 'recent' : 'yours';
     let filter = '';
-    let open = null; // the one group that is expanded (the current colour's, if there is one)
+    let open = null; // the one group that is expanded (the current colour’s, if there is one)
     const cur0 = Number.isInteger(current) ? refdata.ref.colorById.get(current) : null;
     if (allOnly && cur0) open = refdata.colorGroup(cur0);
     d.innerHTML = `<form method="dialog">
@@ -280,7 +280,7 @@ export function createSorter(el, { onSaved, onChangePart, onUndo } = {}) {
     return st.qtyText.trim() !== '' && Number.isInteger(n) && n >= 1 && n <= 9999 ? n : null;
   };
 
-  // Where the piece would go by default.
+  // Where the brick would go by default.
   function suggest() {
     const q = qty();
     if (q === null || colorId === null || !st.part) return null;
@@ -354,8 +354,8 @@ export function createSorter(el, { onSaved, onChangePart, onUndo } = {}) {
     renderDest();
   }
 
-  // A full-width button for the first predicted bin: the set's picture on the colour that dominates the set.
-  // It does exactly what tapping that bin's tile does (an active bin takes only what its set needs).
+  // A full-width button for the first predicted bin: the set’s picture on the colour that dominates the set.
+  // It does exactly what tapping that bin’s tile does (an active bin takes only what its set needs).
   function sugButton() {
     const sug = suggest();
     if (!sug || !sug.dest.length || st.part.unrec) return '';
@@ -405,7 +405,7 @@ export function createSorter(el, { onSaved, onChangePart, onUndo } = {}) {
       const full = !isActive && !!b.full;
       const blocked = (isActive && remFor(b) <= 0) || full;
       return `
-        <button type="button" class="tile${s ? ' suggested' : ''}" data-bin="${esc(b.id)}"${q === null || colorId === null || blocked ? ' disabled' : ''}${blocked ? ` title="${full ? 'This bin is full' : 'This set doesn’t need this piece'}"` : ''}>
+        <button type="button" class="tile${s ? ' suggested' : ''}" data-bin="${esc(b.id)}"${q === null || colorId === null || blocked ? ' disabled' : ''}${blocked ? ` title="${full ? 'This bin is full' : 'This set doesn’t need this brick'}"` : ''}>
           <span class="binchip big${isActive ? '' : ' store'}"${bins.chipStyle(b)}>${esc(label)}</span>
           <span class="tilename">${esc(name)}</span>
           ${full ? '<span class="tilebadge full">Full</span>' : ''}
@@ -434,7 +434,7 @@ export function createSorter(el, { onSaved, onChangePart, onUndo } = {}) {
           <span class="tilename">Add bin</span>
         </button>`;
     // Preferred bins come first (the suggestion, in the order it fills them), then the other bins
-    // that can take this piece, and bins that can't (set doesn't need it, storage full) go last.
+    // that can take this brick, and bins that can’t (set doesn’t need it, storage full) go last.
     const isBlocked = (b) => (b.type === 'active' && remFor(b) <= 0) || (b.type === 'storage' && !!b.full);
     let ordered = [...active, ...storage];
     if (colorId !== null && !st.part.unrec) {
@@ -461,7 +461,7 @@ export function createSorter(el, { onSaved, onChangePart, onUndo } = {}) {
     if (!made) return;
     await refreshInfo();
     renderDest();
-    toast('Bin added.');
+    toast('Added the storage bin.');
   }
 
   async function commit(items, { keep = 0 } = {}) {
@@ -503,10 +503,10 @@ export function createSorter(el, { onSaved, onChangePart, onUndo } = {}) {
           catName: part.cat_id != null ? refdata.categoryName(part.cat_id) : '',
         });
       }
-      toast(`Saved: ${where}.${extra}`);
+      toast(`Saved to ${where}.${extra}`);
       await refreshInfo();
       if (keep > 0) {
-        // Only part of the quantity fitted in that bin: keep the piece in the panel for the rest.
+        // Only part of the quantity fitted in that bin: keep the brick in the panel for the rest.
         st.qtyText = String(keep);
         renderTop();
         const b0 = info.ctx.bins.find((x) => x.id === items[0].binId);

@@ -51,7 +51,7 @@ function open() {
   return dbPromise;
 }
 
-// Runs fn(store) inside one transaction; resolves with fn's request result (if it returns one).
+// Runs fn(store) inside one transaction; resolves with fn’s request result (if it returns one).
 async function run(storeName, mode, fn) {
   const d = await open();
   return new Promise((resolve, reject) => {

@@ -54,12 +54,12 @@ export async function renderHome() {
         </button>
         <div class="todaytext">
           <div class="todayhead">${rs.today >= rs.goal ? 'Goal reached today! 🎯' : `${fmt(rs.goal - rs.today)} to today’s goal`}</div>
-          <div class="streak">🔥 ${rs.streak} day${rs.streak === 1 ? '' : 's'} in a row${rs.best > rs.streak ? ` · best ${rs.best}` : ''}</div>
+          <div class="streak"><svg class="flame" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3c1 3 5 5 5 10a5 5 0 0 1-10 0c0-2 1-3 2-4 0 2 1 3 2 3 0-3-1-5 1-9z"/></svg> ${rs.streak} day${rs.streak === 1 ? '' : 's'} in a row${rs.best > rs.streak ? ` · best ${rs.best}` : ''}</div>
         </div>
       </div>
       <div class="week" aria-label="Last 7 days">${rs.week.map((d) => `<div class="wday${d.today ? ' now' : ''}"><i style="--h:${Math.round((d.n / weekMax) * 100)}%" title="${fmt(d.n)}"></i><span>${esc(d.label)}</span></div>`).join('')}</div>
       <div class="milestone">
-        <div class="cardmeta">${ms.next ? `${fmt(ms.next - rs.total)} pieces to ${fmt(ms.next)}` : 'Every milestone reached!'}</div>
+        <div class="cardmeta">${ms.next ? `${fmt(ms.next - rs.total)} bricks to ${fmt(ms.next)}` : 'Every milestone reached!'}</div>
         <div class="bar solid" aria-hidden="true"><i style="--p:${ms.pct}%"></i></div>
       </div>
     </section>`;
@@ -89,7 +89,7 @@ export async function renderHome() {
           <span class="binchip big"${bins.chipStyle(a.bin)}>Bin ${a.bin.number}</span>
           <div class="cardtext">
             <div class="cardname">${esc(a.set.name)}</div>
-            <div class="cardmeta">${fmt(a.heldTotal)} of ${fmt(a.neededTotal)} pieces · ${pct}%</div>
+            <div class="cardmeta">${fmt(a.heldTotal)} of ${fmt(a.neededTotal)} bricks · ${pct}%</div>
             <div class="bar solid" aria-hidden="true"><i style="--p:${pct}%"></i></div>
           </div>
           <span class="chev" aria-hidden="true">›</span>
@@ -101,21 +101,20 @@ export async function renderHome() {
   let restoring = '';
   if (setsAdded === 0 && (await sync.isConfigured().catch(() => false))) {
     restoring = `<section class="panel"><h2>${sync.state.running ? 'Restoring from your Google Sheet…' : 'Nothing on this device yet'}</h2>
-      <p>${sync.state.running ? 'Your sets, bins and sorted pieces are being brought back, parts lists included. Nothing has been lost.' : 'Your data is safe in your Google Sheet. Open Settings and tap Sync now to bring it back.'}</p>
+      <p>${sync.state.running ? 'Your sets, bins and sorted bricks are being brought back, parts lists included. Nothing has been lost.' : 'Your data is safe in your Google Sheet. Open Settings and tap Sync now to bring it back.'}</p>
       ${sync.state.running ? '' : '<a class="btn primary" href="#/settings">Open Settings</a>'}</section>`;
   }
   view.innerHTML = `
     ${restoring}
     <section class="stats" id="stats">
       ${stat('Sets added', setsAdded)}
-      ${stat('Pieces found', found, 'in your set bins')}
-      ${stat('Total pieces sorted', sorted, 'including storage')}
+      ${stat('Bricks found', found, 'in your set bins')}
+      ${stat('Total bricks sorted', sorted, 'including storage')}
       ${stat('Sets complete', complete)}
     </section>
     ${today}
     <section class="quick">
-      <a class="btn primary block" href="#/scan">Scan a piece</a>
-      <a class="btn block" href="#/add">Log a piece by hand</a>
+      <a class="btn primary block" href="#/add">Log pieces</a>
     </section>
     ${rows ? `<section><h2 class="section-title">In progress</h2><ul class="cards">${rows}</ul></section>` : `
     <section class="panel"><p class="empty">${setsAdded ? 'Open a set and choose “Start rebuilding this set” to give it a bin.' : 'Add a set to get started.'} <a href="#/sets">Go to Sets</a></p></section>`}`;

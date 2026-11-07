@@ -193,7 +193,7 @@ function catHeld(ctx) {
 }
 
 // Storage bin for a part (in a colour). A rule for that exact part wins, then bins whose colour rule
-// lists this colour and that already hold the category, then the category's usual bin, then any bin
+// lists this colour and that already hold the category, then the category’s usual bin, then any bin
 // whose colour rule lists this colour. A bin whose colour rule leaves the colour out is never chosen.
 // Returns null when nothing fits, so the app can ask.
 export function resolveStorage(ctx, part, colorId = null) {
@@ -239,7 +239,7 @@ const RECENT_NEEDED = 3; // how many of them must agree before the category rule
 //  - no rule yet: remember the choice for the category
 //  - you chose a different bin from the suggestion: that part now goes there, and if most of the
 //    recent pieces in the category went there too, the category rule moves as well
-//  - you chose the category's usual bin again: the part's own exception is dropped
+//  - you chose the category’s usual bin again: the part’s own exception is dropped
 // Returns a short sentence for the "Saved" toast, or ''.
 export async function learnStorage({ part, chosenId, suggestedId, ctx, catName, colorId = null }) {
   const chosen = ctx.bins.find((b) => b.id === chosenId);
@@ -259,7 +259,7 @@ export async function learnStorage({ part, chosenId, suggestedId, ctx, catName, 
   }
   if (chosenId === suggestedId) return '';
 
-  // An override. The category's usual bin (valid ones only) decides whether this is a one-off.
+  // An override. The category’s usual bin (valid ones only) decides whether this is a one-off.
   const usual = catKey ? ctx.catMap[catKey] : null;
   if (usual === chosenId) {
     await removeRule('part', part.part_num);
@@ -395,7 +395,7 @@ export async function moveLine(ctx, line, toBinId, qty) {
     const a = ctx.active.find((x) => x.bin.id === to.id);
     const k = `${line.part_num}|${line.color_id}`;
     const rem = a ? (a.need.get(k) || 0) - (a.held.get(k) || 0) : 0;
-    if (rem <= 0) throw new Error(`Bin ${to.number}'s set doesn't need this piece in that colour.`);
+    if (rem <= 0) throw new Error(`Bin ${to.number}'s set doesn’t need this piece in that colour.`);
     if (qty > rem) throw new Error(`Bin ${to.number} only needs ${rem} more of this piece.`);
   }
   const now = nowIso();
@@ -423,7 +423,7 @@ export async function moveLines(ctx, lines, toBinId) {
   return to;
 }
 
-// The short name on a storage bin's tile: whatever was chosen, else the first two letters.
+// The short name on a storage bin’s tile: whatever was chosen, else the first two letters.
 export function binShort(bin) {
   const s = String(bin?.short || '').trim().slice(0, 3);
   return (s || String(bin?.label || '').slice(0, 2)).toUpperCase();
@@ -464,7 +464,7 @@ export async function deleteStorageBin(binId) {
   await db.put('bins', { ...bin, deleted: true, updated: nowIso() });
 }
 
-// How much of a set's parts list is already sitting in storage bins (for the pick list).
+// How much of a set’s parts list is already sitting in storage bins (for the pick list).
 export async function storageMatches(ctx, setNum) {
   const stock = new Map();
   for (const b of ctx.bins.filter((x) => x.type === 'storage')) {
@@ -498,7 +498,7 @@ export function binColors(bin) {
 
 const lum = (hex) => { const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16)); return 0.299 * r + 0.587 * g + 0.114 * b; };
 
-// The background for a bin's chip: one colour solid; two split diagonally in half; three as a half and
+// The background for a bin’s chip: one colour solid; two split diagonally in half; three as a half and
 // two quarters; four as quarters. The first colour chosen gets the largest share.
 export function binBackground(colors) {
   if (colors.length === 1) return colors[0];
@@ -515,7 +515,7 @@ export function chipStyle(bin) {
   return ` style="background:${binBackground(colors)};color:${light ? '#1d1b1a' : '#ffffff'}${shadow};box-shadow:inset 0 0 0 1px rgba(0,0,0,.22)"`;
 }
 
-// A small square showing the bin's colours, for page headings ('' if none chosen).
+// A small square showing the bin’s colours, for page headings ('' if none chosen).
 export function colorSquare(bin) {
   const colors = binColors(bin);
   return colors.length ? `<span class="binsquare" aria-hidden="true" style="background:${binBackground(colors)}"></span>` : '';

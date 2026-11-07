@@ -5,7 +5,7 @@ import * as swatchLib from './swatch.js';
 import { pickColor, refreshInfo as refreshSorterInfo } from './screens/sorter.js';
 import * as bins from './bins.js';
 import * as sync from './sync.js';
-import { $, view, esc, decode, fmt, safeRgb, setTitle, toast, openDialog, ask } from './ui.js';
+import { $, view, esc, decode, fmt, ago, safeRgb, setTitle, toast, openDialog, ask } from './ui.js';
 import { renderScan, stopCamera } from './screens/scan.js';
 import { renderHome } from './screens/home.js';
 import { renderBins, renderBin, confirmAbandon, exportSorting, drawRules } from './screens/bins.js';
@@ -17,7 +17,7 @@ async function chooseVersion(options) {
   const buttons = options.map((o, i) => `
     <button class="choice" value="${i}">
       <strong>${esc(o.set_num)}</strong>
-      <span>${esc(decode(o.name))} · ${esc(o.year)} · ${fmt(o.num_parts)} pieces</span>
+      <span>${esc(decode(o.name))} · ${esc(o.year)} · ${fmt(o.num_parts)} bricks</span>
     </button>`).join('');
   const host = document.querySelector('#addChoice'); // the Add sets pop-up is open: ask inside it
   if (host) {
@@ -62,7 +62,7 @@ const isSticker = (catName, partNum, name) => (
   /sticker/i.test(catName || '') || /stk/i.test(partNum || '') || /^sticker/i.test(name || '')
 );
 
-// Turns Rebrickable's parts list into one line per part and colour. Spares are left out.
+// Turns Rebrickable’s parts list into one line per part and colour. Spares are left out.
 function buildLines(setNum, results, catMap) {
   const lines = new Map();
   let spares = 0;
@@ -104,7 +104,7 @@ function buildLines(setNum, results, catMap) {
 
 const includeFigs = async () => (await db.getSetting('includeFigs')) !== false;
 
-// A set's parts, plus its minifigure parts when that is switched on. A failure fetching the figures never
+// A set’s parts, plus its minifigure parts when that is switched on. A failure fetching the figures never
 // loses the set: it is saved without them and `figs` says so.
 async function downloadParts(setNum, key, onProgress) {
   const results = await rb.getSetParts(setNum, key, (n, total) => onProgress?.(`downloading parts… ${fmt(n)}${total ? ` of ${fmt(total)}` : ''}`, total ? n / total : null));
@@ -276,7 +276,7 @@ async function refreshSetList() {
         <div class="setimg">${s.img ? `<img src="${esc(s.img)}" alt="" loading="lazy">` : ''}</div>
         <div class="cardtext">
           <div class="cardname">${esc(s.name)}</div>
-          <div class="cardmeta">${esc(s.set_num)} · ${esc(s.year)} · ${fmt(s.pieces)} pieces</div>
+          <div class="cardmeta">${esc(s.set_num)} · ${esc(s.year)} · ${fmt(s.pieces)} bricks</div>
           ${activeBy.get(s.set_num) ? `<div class="cardmeta"><span class="binchip">Bin ${activeBy.get(s.set_num).bin.number}</span> ${Math.round(activeBy.get(s.set_num).frac * 100)}% sorted</div>` : ''}
         </div>
         <span class="chev" aria-hidden="true">›</span>
@@ -312,7 +312,7 @@ function logLine(token) {
 
 async function addOne(token, line, key) {
   if (!/^[A-Za-z0-9]+(-\d+)?$/.test(token)) {
-    throw new Error("doesn't look like a set number");
+    throw new Error("doesn’t look like a set number");
   }
   const guess = token.includes('-') ? token : `${token}-1`;
   const existing = await db.get('sets', guess);
@@ -347,7 +347,7 @@ async function addOne(token, line, key) {
   const dl = await downloadParts(info.set_num, key, (text, frac) => line.set(text, 'work', frac));
   line.set('saving to this device…');
   const rec = await storeSet(info, dl.results, catMap, dup, dl.figs);
-  line.set(`added ${decode(info.name)}: ${fmt(rec.line_count)} part types, ${fmt(rec.pieces)} pieces${dl.figError ? ' (minifigures could not be added; refresh the set to retry)' : ''}`, 'ok');
+  line.set(`added ${decode(info.name)}: ${fmt(rec.pieces)} bricks${dl.figError ? ' (minifigures could not be added; refresh the set to retry)' : ''}`, 'ok');
 }
 
 async function addSets(text) {
@@ -386,7 +386,7 @@ async function renderSet(setNum) {
   const rec = await db.get('sets', setNum);
   if (!rec || rec.deleted) {
     setTitle('Set not found');
-    view.innerHTML = '<p class="empty">That set isn\'t in your list. <a href="#/sets">Back to sets</a></p>';
+    view.innerHTML = '<p class="empty">That set isn’t in your list. <a href="#/sets">Back to sets</a></p>';
     return;
   }
   setTitle(rec.set_num);
@@ -401,9 +401,9 @@ async function renderSet(setNum) {
       <div>
         <h2 class="setname">${esc(rec.name)}</h2>
         <p class="cardmeta">${esc(rec.set_num)} · ${esc(rec.year)}</p>
-        <p class="setstats"><strong>${fmt(rec.pieces)}</strong> pieces · <strong>${fmt(rec.line_count)}</strong> part types${
+        <p class="setstats"><strong>${fmt(rec.pieces)}</strong> bricks · <strong>${fmt(rec.line_count)}</strong> kinds${
           rec.sticker_lines ? ` · <strong>${fmt(rec.sticker_lines)}</strong> sticker` : ''}</p>
-        <p class="hint">${rec.spares ? `${fmt(rec.spares)} spare pieces are not counted. ` : ''}${rec.figs_at ? 'Minifigure parts are included.' : 'Minifigure parts are not included.'}</p>
+        <p class="hint">${rec.spares ? `${fmt(rec.spares)} spare bricks are not counted. ` : ''}${rec.figs_at ? 'Minifigure parts are included.' : 'Minifigure parts are not included.'}</p>
       </div>
     </section>
     <section class="panel" id="binPanel"></section>
@@ -443,7 +443,7 @@ async function renderSet(setNum) {
   $('#refreshSet').addEventListener('click', () => refreshSet(rec));
   $('#removeSet').addEventListener('click', async () => {
     if (rec.status === 'active') {
-      toast('This set has an active bin. Abandon the bin first.');
+      toast('This set has an active bin. Remove its bin first.');
       return;
     }
     const ok = await ask({
@@ -467,10 +467,10 @@ async function drawBinPanel(rec) {
     const a = ctx.active.find((x) => x.set.set_num === rec.set_num);
     el.innerHTML = `
       <h2>Bin ${fresh.active_bin}</h2>
-      <p>${a ? `${fmt(a.heldTotal)} of ${fmt(a.neededTotal)} pieces sorted (${Math.round(a.frac * 100)}%).` : 'Active.'}</p>
+      <p>${a ? `${fmt(a.heldTotal)} of ${fmt(a.neededTotal)} bricks sorted (${Math.round(a.frac * 100)}%).` : 'Active.'}</p>
       <div class="actions">
         <a class="btn" href="#/bin/${encodeURIComponent(fresh.bin_id)}">Open bin</a>
-        <button class="btn danger" id="abandonBin">Abandon bin</button>
+        <button class="btn danger" id="abandonBin">Remove bin</button>
       </div>`;
     $('#abandonBin').addEventListener('click', async () => {
       if (await confirmAbandon(fresh.bin_id)) await renderSet(rec.set_num);
@@ -478,14 +478,14 @@ async function drawBinPanel(rec) {
   } else {
     el.innerHTML = `
       <h2>Rebuild this set</h2>
-      <p>Starting it gives the set its own numbered bin. Matching pieces you add will be put in that bin until the set is complete.</p>
+      <p>Starting it gives the set its own numbered bin. Matching bricks you add will be put in that bin until the set is complete.</p>
       <button class="btn primary" id="startBin">Start rebuilding this set</button>`;
     $('#startBin').addEventListener('click', async () => {
       try {
         const bin = await bins.activateSet(rec.set_num);
         const m = await bins.storageMatches(await bins.loadContext(), rec.set_num);
         toast(m.pieces
-          ? `${rec.set_num} now has Bin ${bin.number}. ${fmt(m.pieces)} matching pieces are already in storage: see Missing in the bin.`
+          ? `${rec.set_num} now has Bin ${bin.number}. ${fmt(m.pieces)} matching bricks are already in storage: see Missing in the bin.`
           : `${rec.set_num} now has Bin ${bin.number}.`);
         await renderSet(rec.set_num);
       } catch (e) { toast(e.message); }
@@ -519,7 +519,7 @@ async function refreshSet(rec) {
     const catMap = await ensureCategories(key);
     const dl = await downloadParts(rec.set_num, key);
     await storeSet(info, dl.results, catMap, rec, dl.figs);
-    toast(dl.figError ? 'Parts list refreshed, but the minifigures could not be fetched.' : 'Parts list refreshed.');
+    toast(dl.figError ? 'Refreshed the parts list, but the minifigures could not be fetched.' : 'Refreshed the parts list.');
     await renderSet(rec.set_num);
   } catch (e) {
     toast(e.message || 'Refresh failed.');
@@ -584,34 +584,34 @@ async function renderSettings() {
       </form>
       <button class="btn block" id="syncNow">Sync now</button>
       <p class="hint" id="syncStatus" role="status"></p>
-      <p class="hint">Sets, bins and sorted pieces are backed up. Parts lists are fetched again from Rebrickable on a new device. Your Rebrickable key is never sent to the sheet.</p>
+      <p class="hint">Sets, bins and sorted bricks are backed up. Parts lists are fetched again from Rebrickable on a new device. Your Rebrickable key is never sent to the sheet.</p>
     </section>
     <section class="panel">
       <h2>Colour Swatch</h2>
       <label class="check"><input type="checkbox" id="swatchFirst"> Open the Colour Wall on the Swatch</label>
-      <p class="hint">When logging a piece, the Colour Wall shows your colour plate first instead of Recent colours.</p>
+      <p class="hint">When logging a brick, the Colour Wall shows your colour plate first instead of Recent colours.</p>
       <button type="button" class="btn block" id="editSwatch">Edit the Swatch</button>
     </section>
     <section class="panel">
       <h2>Minifigures</h2>
       <label class="check"><input type="checkbox" id="includeFigs"> Include minifigure parts in sets</label>
-      <p class="hint">Adds each set's minifigure heads, torsos, legs and accessories to its parts list. Adding a set takes longer.</p>
+      <p class="hint">Adds each set’s minifigure heads, torsos, legs and accessories to its parts list. Adding a set takes longer.</p>
       <button type="button" class="btn block" id="addFigsAll">Add minifigures to my existing sets</button>
       <p class="hint" id="figsNote"></p>
     </section>
     <section class="panel">
       <h2>Storage sorting</h2>
-      <p class="hint">Where pieces are stored when no active set needs them.</p>
+      <p class="hint">Where bricks are stored when no active set needs them.</p>
       <details class="rules" id="rules"><summary>Storage rules</summary><div id="rulesBody"></div></details>
       <button type="button" class="btn block" id="exportSort">Export sorting data</button>
       <p class="hint">A file of what is in each storage bin, the rules and your recent choices. Share it to get the rules tuned.</p>
     </section>
     <section class="panel">
       <h2>Your data</h2>
-      <p>${fmt(sets.length)} sets and ${fmt(lineCount)} part lines are stored on this device${
+      <p>${fmt(sets.length)} sets and ${fmt(lineCount)} kinds of brick are stored on this device${
         persistent ? '' : '. <strong>Warning:</strong> this browser is not keeping data between visits'}.</p>
       ${persistent && !persisted ? '<p class="hint">Tip: add this app to your home screen so the browser is less likely to clear its data.</p>' : ''}
-      <button class="btn danger" id="wipe">Delete all sets and parts</button>
+      <button class="btn danger" id="wipe">Remove all sets and bricks</button>
       <p class="hint">Your API key is kept.</p>
     </section>
     <p class="foot">Brick Sorter <span id="appVersion">…</span><br>Not affiliated with the LEGO Group, Rebrickable or Brickognize.</p>`;
@@ -669,9 +669,9 @@ async function renderSettings() {
 
   $('#wipe').addEventListener('click', async () => {
     const ok = await ask({
-      title: 'Delete everything?',
-      body: 'Every set, bin and sorted piece will be removed from this device, and from the Google Sheet if backup is on. Your API key stays.',
-      ok: 'Delete everything',
+      title: 'Remove everything?',
+      body: 'Every set, bin and sorted brick will be removed from this device, and from the Google Sheet if backup is on. Your API key stays.',
+      ok: 'Remove everything',
       danger: true,
     });
     if (!ok) return;
@@ -687,7 +687,7 @@ async function renderSettings() {
     await db.clear('setParts');
     await db.clear('categories');
     await bins.ensureDefaultBins();
-    toast('All sets and sorted pieces deleted.');
+    toast('Removed all sets and sorted bricks.');
     await renderSettings();
   });
 }
@@ -746,7 +746,7 @@ async function editSwatch() {
     if (value === 'save') {
       await swatchLib.setSwatch(cells);
       await refreshSorterInfo();
-      toast('Swatch saved.');
+      toast('Saved the Colour Swatch.');
       return;
     }
     const i = data?.get('cell');
@@ -805,7 +805,7 @@ async function afterSync(r) {
     if (r.partsRestored) toast(`Restored the parts lists for ${r.partsRestored} ${r.partsRestored === 1 ? 'set' : 'sets'} from your sheet.`);
     await restoreMissingParts(); // only sets the sheet had no parts for (older backups) go to Rebrickable
     const hash = location.hash;
-    if (!/^#\/(add|settings)/.test(hash) && !document.querySelector('dialog[open]')) await route(); // refresh what's on screen
+    if (!/^#\/(add|settings)/.test(hash) && !document.querySelector('dialog[open]')) await route(); // refresh what’s on screen
   }
 }
 
@@ -838,7 +838,7 @@ async function setupSyncPanel() {
     if (!summary.isConnected) return; // the screen changed while we were reading
     if (!c.url || !c.token) summary.textContent = 'Not set up. Your data is only on this device.';
     else if (sync.state.error) summary.textContent = `Problem: ${sync.state.error}`;
-    else summary.textContent = `${last ? `Last backed up ${new Date(last).toLocaleString('en-GB')}.` : 'Set up, not backed up yet.'}${sync.state.pending ? ` ${fmt(sync.state.pending)} changes waiting.` : ''}`;
+    else summary.textContent = `${last ? `Last backed up ${ago(last)}.` : 'Set up, not backed up yet.'}${sync.state.pending ? ` ${fmt(sync.state.pending)} changes waiting.` : ''}`;
     $('#syncNow').disabled = !c.url || !c.token || sync.state.running;
     $('#syncNow').textContent = sync.state.running ? 'Syncing…' : 'Sync now';
   };
@@ -862,7 +862,7 @@ async function setupSyncPanel() {
     try {
       await navigator.clipboard.writeText($('#syncToken').value);
       status.textContent = 'Code copied.';
-    } catch { status.textContent = "Couldn't copy. Show the code and copy it by hand."; }
+    } catch { status.textContent = "Couldn’t copy. Show the code and copy it by hand."; }
   });
   $('#testSync').addEventListener('click', async (e) => {
     const c = read();

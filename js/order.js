@@ -19,10 +19,10 @@ export function orderItems(missing, { skipStorage }) {
     .filter((l) => l.qty > 0);
 }
 
-// BrickLink numbers differ from Rebrickable's, so ask Rebrickable for its cross-reference for this set.
+// BrickLink numbers differ from Rebrickable’s, so ask Rebrickable for its cross-reference for this set.
 async function blIds(set, key) {
   const results = await rb.getSetParts(set.set_num, key);
-  if (set.figs_at) { try { results.push(...await rb.getSetFigureParts(set.set_num, key)); } catch { /* the set's own parts are enough */ } }
+  if (set.figs_at) { try { results.push(...await rb.getSetFigureParts(set.set_num, key)); } catch { /* the set’s own parts are enough */ } }
   const parts = new Map(); const colours = new Map();
   for (const r of results) {
     const p = r.part || {}; const c = r.color || {};
@@ -68,7 +68,7 @@ export async function orderDialog({ set, missing }) {
     const s = summary();
     $('#ordFormats').innerHTML = Object.entries(FORMATS).map(([k, f]) => `
       <label class="check ordfmt"><input type="radio" name="fmt" value="${k}"${k === format ? ' checked' : ''}> <span><strong>${esc(f.label)}</strong><small>${esc(f.hint)}</small></span></label>`).join('');
-    $('#ordSummary').textContent = s.items.length ? `${fmt(s.pieces)} pieces in ${fmt(s.items.length)} lines` : 'Nothing to order. Every missing piece is already in storage.';
+    $('#ordSummary').textContent = s.items.length ? `${fmt(s.pieces)} bricks to order` : 'Nothing to order. Every missing brick is already in storage.';
     $('#ordGo').disabled = $('#ordCopy').disabled = !s.items.length;
     $('#ordNote').textContent = format === 'bricklink' && !key ? 'Add your Rebrickable key in Settings so BrickLink numbers can be looked up. Without it the file uses Rebrickable numbers, which don’t always match.' : '';
   };
@@ -77,14 +77,14 @@ export async function orderDialog({ set, missing }) {
     const go = $('#ordGo'); const label = go.textContent; go.disabled = true; go.textContent = 'Preparing…';
     try { built = await buildOrder(format, s.items, set, key); } catch (e) { toast(e.message || 'Couldn’t prepare the order.'); return null; } finally { go.textContent = label; go.disabled = !s.items.length; }
     await db.setSetting('orderFormat', format);
-    if (built.unmatched) $('#ordNote').textContent = `${fmt(built.unmatched)} ${built.unmatched === 1 ? 'line' : 'lines'} had no BrickLink number and use the Rebrickable one. Check ${built.unmatched === 1 ? 'it' : 'them'} after uploading.`;
+    if (built.unmatched) $('#ordNote').textContent = `${fmt(built.unmatched)} ${built.unmatched === 1 ? 'brick' : 'bricks'} had no BrickLink number and use the Rebrickable one. Check ${built.unmatched === 1 ? 'it' : 'them'} after uploading.`;
     return built;
   };
   const p = openDialog(`
     <h2>Create order</h2>
     <p class="hint">Make a list of what ${esc(set.name || 'this set')} is still missing, ready to upload to a BrickLink wanted list.</p>
     <div id="ordFormats" role="radiogroup" aria-label="File type"></div>
-    ${hasStorage ? '<label class="check"><input type="checkbox" id="ordSkip" checked> Leave out pieces already in storage</label>' : ''}
+    ${hasStorage ? '<label class="check"><input type="checkbox" id="ordSkip" checked> Leave out bricks already in storage</label>' : ''}
     <p id="ordSummary" class="hint" role="status"></p>
     <p id="ordNote" class="hint" role="status"></p>
     <div class="row">
@@ -107,10 +107,10 @@ export async function orderDialog({ set, missing }) {
       a.download = `order-${set.set_num}-${format}.${f.ext}`;
       document.body.appendChild(a); a.click(); a.remove();
       setTimeout(() => URL.revokeObjectURL(a.href), 5000);
-      toast('File saved.');
+      toast('Saved the order file.');
     } else if (e.target.closest('#ordCopy')) {
       const r = await make(); if (!r) return;
-      try { await navigator.clipboard.writeText(r.text); toast('Copied.'); } catch { toast('Couldn’t copy. Use Download file instead.'); }
+      try { await navigator.clipboard.writeText(r.text); toast('Copied the order.'); } catch { toast('Couldn’t copy. Use Download file instead.'); }
     }
   }, { signal: ctl.signal });
   await p;

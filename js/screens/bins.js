@@ -1,4 +1,4 @@
-// Bins: the list of active and storage bins, what is in each, editing pieces, and abandoning a bin.
+// Bins: the list of active and storage bins, what is in each, editing bricks, and abandoning a bin.
 import * as db from '../db.js';
 import * as refdata from '../data.js';
 import * as bins from '../bins.js';
@@ -39,7 +39,7 @@ export async function renderBins() {
           <span class="binchip big"${bins.chipStyle(a.bin)}>Bin ${a.bin.number}</span>
           <div class="cardtext">
             <div class="cardname">${esc(a.set.name)}</div>
-            <div class="cardmeta">${esc(a.set.set_num)} · ${fmt(a.heldTotal)} of ${fmt(a.neededTotal)} pieces · ${pct}%</div>
+            <div class="cardmeta">${esc(a.set.set_num)} · ${fmt(a.heldTotal)} of ${fmt(a.neededTotal)} bricks · ${pct}%</div>
             <div class="bar solid" aria-hidden="true"><i style="--p:${pct}%"></i></div>
           </div>
           <span class="chev" aria-hidden="true">›</span>
@@ -49,7 +49,7 @@ export async function renderBins() {
     : '<p class="empty">No active bins yet. Open a set and choose “Start rebuilding this set”.</p>';
 
   view.innerHTML = `
-    <a class="chip addbin searchall" href="#/bin/all"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.5 15.5L21 21"/></svg> Search all pieces</a>
+    <a class="chip addbin searchall" href="#/bin/all"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.5 15.5L21 21"/></svg> Search all bricks</a>
     <section>
       <h2 class="section-title">Active bins</h2>
       ${activeHtml}
@@ -62,7 +62,7 @@ export async function renderBins() {
             <span class="binchip store big"${bins.chipStyle(b)}>${esc(bins.binShort(b))}</span>
             <div class="cardtext">
               <div class="cardname">${esc(b.label)}</div>
-              <div class="cardmeta">${fmt(count(b.id))} ${count(b.id) === 1 ? 'piece' : 'pieces'}${b.desc ? ` · ${esc(b.desc)}` : ''}${paletteDots(b) ? ` ${paletteDots(b)}` : ''}${b.full ? ' · <span class="tag warn">Full</span>' : ''}${wantedLines(b.id) ? ` · <span class="tag ok">${wantedLines(b.id)} ${wantedLines(b.id) === 1 ? 'line' : 'lines'} wanted by active sets</span>` : ''}</div>
+              <div class="cardmeta">${fmt(count(b.id))} ${count(b.id) === 1 ? 'brick' : 'bricks'}${b.desc ? ` · ${esc(b.desc)}` : ''}${paletteDots(b) ? ` ${paletteDots(b)}` : ''}${b.full ? ' · <span class="tag warn">Full</span>' : ''}${wantedLines(b.id) ? ` · <span class="tag ok">${wantedLines(b.id)} ${wantedLines(b.id) === 1 ? 'line' : 'lines'} wanted by active sets</span>` : ''}</div>
             </div>
             <span class="chev" aria-hidden="true">›</span>
           </a>
@@ -103,7 +103,7 @@ export async function exportSorting(ctx) {
   a.download = `brick-sorter-storage-${out.exported.slice(0, 10)}.json`;
   document.body.appendChild(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(a.href), 5000);
-  return `Exported ${pl(lines.length, 'line', 'lines')} from ${pl(storage.length, 'storage bin', 'storage bins')}.`;
+  return `Exported ${pl(lines.length, 'brick type', 'brick types')} from ${pl(storage.length, 'storage bin', 'storage bins')}.`;
 }
 
 export async function drawRules() {
@@ -135,15 +135,15 @@ export async function drawRules() {
   ];
   const body = view.querySelector('#rulesBody');
   body.innerHTML = rows.length
-    ? `<p class="hint">Where pieces that no active set needs are stored. A rule for one part beats the rule for its category. The rules follow you: choose a different bin and that part goes there next time, and when most recent pieces of a category go to one bin, the category follows. A full bin is skipped.</p><ul class="rulelist">${rows.join('')}</ul>`
-    : '<p class="hint">No rules yet. The first time a piece needs storage, the app asks which bin and remembers.</p>';
+    ? `<p class="hint">Where bricks that no active set needs are stored. A rule for one part beats the rule for its category. The rules follow you: choose a different bin and that part goes there next time, and when most recent bricks of a category go to one bin, the category follows. A full bin is skipped.</p><ul class="rulelist">${rows.join('')}</ul>`
+    : '<p class="hint">No rules yet. The first time a brick needs storage, the app asks which bin and remembers.</p>';
   body.onchange = async (e) => {
     const s = e.target.closest('select[data-rule-kind]');
     if (!s) return;
     const name = s.dataset.ruleKind === 'category' ? 'categoryMap' : 'partOverrides';
     const map = { ...((await db.getSetting(name)) || {}), [s.dataset.ruleKey]: s.value };
     await db.setSetting(name, map);
-    toast('Rule updated.');
+    toast('Updated the storage rule.');
   };
   body.onclick = async (e) => {
     const b = e.target.closest('[data-rule-del]');
@@ -153,13 +153,13 @@ export async function drawRules() {
   };
 }
 
-// ---------- One bin (or all pieces) ----------
+// ---------- One bin (or all bricks) ----------
 
 let binMode = 'missing'; // 'missing' | 'found' for active bins
 const pickOpen = new Set(); // storage bins expanded in the pick list
-let pickOnly = false; // missing list: only pieces that are sitting in storage
+let pickOnly = false; // missing list: only bricks that are sitting in storage
 let colorFilter = null; // colour id chosen with the Colour Wall (bin view)
-let offOnly = false; // storage bin: only lines outside the bin's colour rule
+let offOnly = false; // storage bin: only lines outside the bin’s colour rule
 let neededOnly = false; // storage bin: only lines an active set still wants
 
 export async function renderBin(id, keepMode = false) {
@@ -169,7 +169,7 @@ export async function renderBin(id, keepMode = false) {
   const bin = isAll ? null : ctx.bins.find((b) => b.id === id);
   if (!isAll && !bin) {
     setTitle('Bin not found');
-    view.innerHTML = '<p class="empty">That bin doesn\'t exist any more. <a href="#/bins">Back to bins</a></p>';
+    view.innerHTML = '<p class="empty">That bin doesn’t exist any more. <a href="#/bins">Back to bins</a></p>';
     return;
   }
   await refdata.loadRef().catch(() => {});
@@ -179,10 +179,10 @@ export async function renderBin(id, keepMode = false) {
   const wm = bins.wantedMap(ctx);
   const wantedFor = (l) => (l.part_num && (wm.get(`${l.part_num}|${l.color_id}`) || [])) || [];
   const wantedCount = lines.filter((l) => wantedFor(l).length && ctx.bins.find((b) => b.id === l.bin_id)?.type === 'storage').length;
-  const title = isAll ? 'All pieces' : bins.binLabel(bin, ctx.setsByNum);
+  const title = isAll ? 'All bricks' : bins.binLabel(bin, ctx.setsByNum);
   const isActive = !isAll && bin.type === 'active';
   let missing = [];
-  const catOfPart = new Map(); // part number -> the set list's category name (active bins)
+  const catOfPart = new Map(); // part number -> the set list’s category name (active bins)
   if (isActive) {
     const held = new Map();
     for (const l of lines) held.set(`${l.part_num}|${l.color_id}`, (held.get(`${l.part_num}|${l.color_id}`) || 0) + l.qty);
@@ -193,7 +193,7 @@ export async function renderBin(id, keepMode = false) {
       .map((l) => ({ ...l, rem: l.qty - l.have }))
       .filter((l) => l.rem > 0)
       .sort((a, b) => a.cat_name.localeCompare(b.cat_name) || a.name.localeCompare(b.name) || String(a.color_name).localeCompare(String(b.color_name)));
-    // Matching pieces already sitting in storage bins (the pick list).
+    // Matching bricks already sitting in storage bins (the pick list).
     const stock = new Map();
     for (const b of ctx.bins.filter((x) => x.type === 'storage')) {
       for (const l of ctx.byBin.get(b.id) || []) {
@@ -209,7 +209,7 @@ export async function renderBin(id, keepMode = false) {
     }
   }
   if (isActive) lines.sort((a, b) => (catOfPart.get(a.part_num) || 'Other').localeCompare(catOfPart.get(b.part_num) || 'Other') || (a.name || '').localeCompare(b.name || '') || a.color_name.localeCompare(b.color_name));
-  // Active bins show the same category headings as the set's parts list.
+  // Active bins show the same category headings as the set’s parts list.
   const groupByCategory = (cats) => {
     const ul = listEl.querySelector('ul.parts');
     if (!ul) return;
@@ -239,7 +239,7 @@ export async function renderBin(id, keepMode = false) {
   };
   const pickCount = missing.filter((m) => m.avail > 0).length;
   const missingCount = missing.reduce((n, l) => n + l.rem, 0);
-  setTitle(isAll ? 'All pieces' : bin.type === 'active' ? `Bin ${bin.number}` : bin.label);
+  setTitle(isAll ? 'All bricks' : bin.type === 'active' ? `Bin ${bin.number}` : bin.label);
 
   let head = '';
   if (!isAll && bin.type === 'active') {
@@ -257,12 +257,12 @@ export async function renderBin(id, keepMode = false) {
           </div>
           <div class="binhead-text">
             <h2 class="setname">${bins.colorSquare(bin)}${esc(a?.set.name || 'Set')}</h2>
-            <p class="cardmeta">${esc(bin.set_num)}${a ? `<br>${fmt(a.heldTotal)} of ${fmt(a.neededTotal)} pieces` : ''}</p>
+            <p class="cardmeta">${esc(bin.set_num)}${a ? `<br>${fmt(a.heldTotal)} of ${fmt(a.neededTotal)} bricks` : ''}</p>
           </div>
         </div>
         <div class="binfoot">
           <button type="button" class="btn" id="createOrder">Create order</button>
-          <button type="button" class="iconbtn trash" id="abandon" aria-label="Abandon this bin">${ico('<path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14M10 10v6M14 10v6"/>')}</button>
+          <button type="button" class="iconbtn trash" id="abandon" aria-label="Remove this bin">${ico('<path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14M10 10v6M14 10v6"/>')}</button>
         </div>
       </section>`;
   } else if (!isAll) {
@@ -270,7 +270,7 @@ export async function renderBin(id, keepMode = false) {
       <section class="panel binpanel">
         ${bin.locked ? '' : `<button type="button" class="iconbtn editbtn" id="editBin" aria-label="Edit bin"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20l1-4L16.5 4.5a2.1 2.1 0 013 3L8 19z"/><path d="M14 7l3 3"/></svg></button>`}
         <h2 class="setname">${bins.colorSquare(bin)}${esc(bin.label)}</h2>
-        <p class="cardmeta">${fmt(partCount(lines))} ${partCount(lines) === 1 ? 'piece' : 'pieces'}${bin.desc ? ` · ${esc(bin.desc)}` : ''}</p>
+        <p class="cardmeta">${fmt(partCount(lines))} ${partCount(lines) === 1 ? 'brick' : 'bricks'}${bin.desc ? ` · ${esc(bin.desc)}` : ''}</p>
         ${bin.locked ? '' : paletteRow(bin)}
         ${bin.full ? '<p class="hint">This bin is full. Nothing new is suggested or accepted here until you reopen it.</p>' : ''}
         ${bin.locked ? '<div class="actions"><button class="btn" id="binColor">Bin colour</button></div>' : `<div class="binfoot">
@@ -278,13 +278,13 @@ export async function renderBin(id, keepMode = false) {
             <button type="button" id="openBtn" aria-pressed="${!bin.full}">Open</button>
             <button type="button" id="fullBtn" aria-pressed="${!!bin.full}">Full</button>
           </div>
-          <button type="button" class="iconbtn trash" id="delBin" aria-label="Delete bin"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14M10 10v6M14 10v6"/></svg></button>
+          <button type="button" class="iconbtn trash" id="delBin" aria-label="Remove this storage bin"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14M10 10v6M14 10v6"/></svg></button>
         </div>`}
       </section>`;
   }
 
   view.innerHTML = `
-    <a class="backlink" href="#/bins">‹ All bins</a>
+    <a class="backlink" href="#/bins">‹ Store</a>
  ${head}
     <section class="panel">
       <h2 class="panelhead">Inventory</h2>
@@ -295,7 +295,7 @@ export async function renderBin(id, keepMode = false) {
       ${binMode === 'missing' && pickCount ? `<button type="button" class="chip pickchip" id="pickToggle" aria-pressed="${pickOnly}">In storage: ${fmt(pickCount)} ${pickCount === 1 ? 'part' : 'parts'} to pick</button>` : ''}` : ''}
       ${!isActive && wantedCount ? `<button type="button" class="chip pickchip" id="neededToggle" aria-pressed="${neededOnly}">Wanted by active sets: ${fmt(wantedCount)} ${wantedCount === 1 ? 'line' : 'lines'}</button>` : ''}
       ${(() => { const n = (!isAll && bin.type === 'storage' && bins.binPalette(bin).length) ? lines.filter((l) => !bins.acceptsColour(bin, l.color_id)).length : 0; return n ? `<button type="button" class="chip pickchip" id="offToggle" aria-pressed="${offOnly}">Outside this bin’s colour rule: ${fmt(n)} ${n === 1 ? 'line' : 'lines'}</button>` : ''; })()}
-      <label for="filter" class="sr">Filter pieces</label>
+      <label for="filter" class="sr">Filter bricks</label>
       <input id="filter" type="search" placeholder="Search name, part no. or colour" autocomplete="off">
       <div class="colorfilter" id="colorChips"></div>
       <p class="hint" id="count"></p>
@@ -311,7 +311,7 @@ export async function renderBin(id, keepMode = false) {
   let shownLines = neededOnly && !isActive ? lines.filter((l) => wantedFor(l).length && ctx.bins.find((b) => b.id === l.bin_id)?.type === 'storage') : lines;
   if (offOnly && offLines.length) shownLines = offLines;
   const basePool = showMissing ? (pickOnly ? missing.filter((l) => l.avail > 0) : missing) : shownLines;
-  // Colour chips: the colours in this list, most pieces first.
+  // Colour chips: the colours in this list, most bricks first.
   const chipMap = new Map();
   for (const l of basePool) {
     const c = chipMap.get(l.color_id) || { id: l.color_id, name: l.color_name, rgb: l.rgb, trans: !!l.is_trans || /^Trans/i.test(l.color_name || ''), n: 0 };
@@ -335,10 +335,10 @@ export async function renderBin(id, keepMode = false) {
       const pool = basePool.filter(byColor);
       const shown = needle ? pool.filter((l) => match(l, needle)) : pool;
       $('#count').textContent = missing.length
-        ? `${pl(shown.reduce((n, l) => n + l.rem, 0), 'piece', 'pieces')} in ${pl(shown.length, 'line', 'lines')} still missing`
+        ? `${pl(shown.reduce((n, l) => n + l.rem, 0), 'brick', 'bricks')} still missing`
         : '';
       if (!shown.length) {
-        listEl.innerHTML = `<p class="empty">${missing.length ? 'No pieces match.' : 'Nothing missing. This set is complete!'}</p>`;
+        listEl.innerHTML = `<p class="empty">${missing.length ? 'No bricks match.' : 'Nothing missing. This set is complete!'}</p>`;
         return;
       }
       const rowHtml = (l, from) => `
@@ -378,14 +378,14 @@ export async function renderBin(id, keepMode = false) {
     }
     const pool = shownLines.filter(byColor);
     const shown = needle ? pool.filter((l) => match(l, needle)) : pool;
-    $('#count').textContent = `${pl(partCount(shown), 'piece', 'pieces')} in ${pl(shown.length, 'line', 'lines')}`;
+    $('#count').textContent = `${pl(partCount(shown), 'brick', 'bricks')}`;
     bulkShown = shown;
     const bulk = $('#bulkRow');
     const canBulk = bin?.type === 'storage' && !isAll && shown.length > 0;
     bulk.hidden = !canBulk;
-    if (canBulk) bulk.innerHTML = `<button type="button" class="btn" id="bulkMove">Move ${colorFilter !== null || needle ? 'these' : 'all'} ${pl(partCount(shown), 'piece', 'pieces')} to another bin…</button>`;
+    if (canBulk) bulk.innerHTML = `<button type="button" class="btn" id="bulkMove">Move ${colorFilter !== null || needle ? 'these' : 'all'} ${pl(partCount(shown), 'brick', 'bricks')} to another bin…</button>`;
     if (!shown.length) {
-      listEl.innerHTML = `<p class="empty">${lines.length ? 'No pieces match.' : isAll ? 'Nothing has been sorted yet.' : 'Nothing found yet. Use the Missing tab or the Add tab.'}</p>`;
+      listEl.innerHTML = `<p class="empty">${lines.length ? 'No bricks match.' : isAll ? 'Nothing has been sorted yet.' : 'Nothing found yet. Use the Missing tab or the Log tab.'}</p>`;
       return;
     }
     listEl.innerHTML = `<ul class="parts">${shown.map((l) => {
@@ -507,7 +507,7 @@ export async function renderBin(id, keepMode = false) {
     await renderBin(id, true);
   };
   $('#delBin')?.addEventListener('click', async () => {
-    if (!(await ask({ title: 'Delete this bin?', body: `${bin.label} will be removed. Any storage rules that point to it will ask again next time.`, ok: 'Delete', danger: true }))) return;
+    if (!(await ask({ title: 'Remove this bin?', body: `${bin.label} will be removed. Its bricks stay in the app. Any storage rules that point to it will ask again next time.`, ok: 'Remove', danger: true }))) return;
     try {
       await bins.deleteStorageBin(bin.id);
       location.hash = '#/bins';
@@ -516,31 +516,31 @@ export async function renderBin(id, keepMode = false) {
   void title;
 }
 
-// Asks first; then deletes every piece in the bin and returns the set to the catalogue.
+// Asks first; then deletes every brick in the bin and returns the set to the catalogue.
 export async function confirmAbandon(binId) {
   const ctx = await bins.loadContext();
   const bin = ctx.bins.find((b) => b.id === binId);
   if (!bin) return false;
   const lines = ctx.byBin.get(binId) || [];
-  const pieces = partCount(lines);
+  const bricks = partCount(lines);
   const set = ctx.setsByNum.get(bin.set_num);
   const name = `Bin ${bin.number}${set ? ` (${set.name})` : ''}`;
-  const body = pieces
-    ? `The ${fmt(pieces)} ${pieces === 1 ? 'piece' : 'pieces'} sorted into this bin (${fmt(lines.length)} part types) will be deleted from the app. This can't be undone. The set goes back to your catalogue and you can start it again later.`
-    : 'This bin is empty. The set goes back to your catalogue and you can start it again later.';
+  const body = bricks
+    ? `The ${fmt(bricks)} ${bricks === 1 ? 'brick' : 'bricks'} sorted into this bin will be removed from the app. This can’t be undone. The set stays in your catalogue and you can start it again later.`
+    : 'This bin is empty. The set stays in your catalogue and you can start it again later.';
   const ok = await ask({
-    title: `Abandon ${name}?`,
+    title: `Remove ${name}?`,
     body,
-    ok: pieces ? `Abandon and delete ${fmt(pieces)}` : 'Abandon bin',
+    ok: 'Remove',
     danger: true,
   });
   if (!ok) return false;
   const res = await bins.abandonBin(binId);
-  toast(res.pieces ? `Bin ${bin.number} abandoned. ${fmt(res.pieces)} pieces deleted.` : `Bin ${bin.number} abandoned.`);
+  toast(res.pieces ? `Removed Bin ${bin.number} and ${fmt(res.pieces)} bricks.` : `Removed Bin ${bin.number}.`);
   return true;
 }
 
-// ---------- Mark a missing piece as found ----------
+// ---------- Mark a missing brick as found ----------
 
 async function markFound(row, bin) {
   let qty = row.rem;
@@ -565,11 +565,11 @@ async function markFound(row, bin) {
     note: '',
     items: [{ binId: bin.id, qty }],
   });
-  toast(`Found: ${fmt(qty)} × ${row.name}`);
+  toast(`Found ${fmt(qty)} × ${row.name}.`);
   return true;
 }
 
-// Moves pieces from storage bins into this active bin.
+// Moves bricks from storage bins into this active bin.
 async function takeFromStorage(row, bin, fromBin = null, fixedQty = null) {
   const stock = fromBin ? row.stock.filter((x) => x.bin.id === fromBin) : row.stock;
   const avail = stock.reduce((n, x) => n + x.line.qty, 0);
@@ -605,13 +605,13 @@ async function takeFromStorage(row, bin, fromBin = null, fixedQty = null) {
     flags: { sticker: !!row.sticker, printed: false, other: false },
     note: '',
     items: [{ binId: bin.id, qty }],
-    log: false, // a move from storage isn't new sorting
+    log: false, // a move from storage isn’t new sorting
   });
-  toast(`Moved ${fmt(qty)} × ${row.name} to Bin ${bin.number}`);
+  toast(`Moved ${fmt(qty)} × ${row.name} to Bin ${bin.number}.`);
   return true;
 }
 
-// Edit a bin's colours (up to four). Resolves true if saved.
+// Edit a bin’s colours (up to four). Resolves true if saved.
 async function binColourDialog(bin, { draft = false } = {}) {
   let sel = bins.binColors(bin);
   const nameOf = (hex) => {
@@ -648,7 +648,7 @@ async function binColourDialog(bin, { draft = false } = {}) {
   }
 }
 
-// One place for a storage bin's settings: name, short name, colours and sorting rules. Pass bin = null to
+// One place for a storage bin’s settings: name, short name, colours and sorting rules. Pass bin = null to
 // make a new bin. Nothing is saved until Save. Resolves true if a bin was created or changed.
 export async function editBinDialog(bin, ctx, lines) {
   const isNew = !bin;
@@ -694,7 +694,7 @@ export async function editBinDialog(bin, ctx, lines) {
   }
 }
 
-// Small swatches for a storage bin's colour rule ('' if it takes any colour).
+// Small swatches for a storage bin’s colour rule ('' if it takes any colour).
 function paletteDots(bin, max = 8) {
   const ids = bins.binPalette(bin);
   const cs = ids.map((i) => refdata.ref.colorById.get(i)).filter(Boolean);
@@ -716,7 +716,7 @@ async function colourRuleDialog(bin, ctx, lines, { draft = false } = {}) {
   for (;;) {
     const value = await openDialog(`
       <h2>Colour rule · ${esc(bin.label)}</h2>
-      <p class="hint">Choose the colours that belong in this bin. New pieces in those colours are suggested here, and colours you leave out are suggested elsewhere. Leave it empty and the bin takes any colour.</p>
+      <p class="hint">Choose the colours that belong in this bin. New bricks in those colours are suggested here, and colours you leave out are suggested elsewhere. Leave it empty and the bin takes any colour.</p>
       <div class="flagrow">${sel.map((i) => { const c = colour(i); return c ? `<button class="chip" value="rm${i}" formnovalidate aria-label="Remove ${esc(c.name)}"><span class="swatch${c.is_trans ? ' trans' : ''}" style="--c:#${esc(safeRgb(c.rgb))}"></span> ${esc(c.name)} ✕</button>` : ''; }).join('') || '<span class="hint">Any colour.</span>'}</div>
       <button class="btn block" value="add" formnovalidate>+ Choose colours</button>
       ${lines.length ? '<button class="btn block" value="fromBin" formnovalidate>Use the colours in this bin now</button>' : ''}
@@ -733,7 +733,7 @@ async function colourRuleDialog(bin, ctx, lines, { draft = false } = {}) {
       const n = new Map();
       for (const l of lines) n.set(l.color_id, (n.get(l.color_id) || 0) + l.qty);
       const total = [...n.values()].reduce((a, b) => a + b, 0) || 1;
-      sel = [...n].filter(([, q]) => q / total >= 0.03).map(([cid]) => cid); // ignore the odd stray piece
+      sel = [...n].filter(([, q]) => q / total >= 0.03).map(([cid]) => cid); // ignore the odd stray brick
       continue;
     }
     if (value === 'add') {
@@ -746,18 +746,18 @@ async function colourRuleDialog(bin, ctx, lines, { draft = false } = {}) {
   }
 }
 
-// Moves every piece in the lines currently shown to another storage bin. Nothing moves until you confirm.
+// Moves every brick in the lines currently shown to another storage bin. Nothing moves until you confirm.
 async function bulkMoveDialog(lines, ctx, from) {
   const opts = ctx.bins
     .filter((b) => !b.deleted && b.type === 'storage' && b.id !== from.id && b.id !== 'unrecognised' && !b.full)
     .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
-  if (!opts.length) { toast('There is no other storage bin to move these to. Add one on the Bins screen.'); return false; }
+  if (!opts.length) { toast('There is no other storage bin to move these to. Add one on the Store screen.'); return false; }
   const total = partCount(lines);
   const colours = [...new Set(lines.map((l) => l.color_name))];
-  const what = colours.length === 1 ? `${colours[0]} pieces` : 'pieces';
+  const what = colours.length === 1 ? `${colours[0]} bricks` : 'bricks';
   const { value, data } = await openDialog(`
     <h2>Move ${esc(what)}</h2>
-    <p class="hint">${pl(total, 'piece', 'pieces')} in ${pl(lines.length, 'line', 'lines')}, from ${esc(from.label)}. Every piece currently shown moves.</p>
+    <p class="hint">${pl(total, 'brick', 'bricks')} from ${esc(from.label)}. Every brick currently shown moves.</p>
     <label for="bb">To</label>
     <select id="bb" name="bin">${opts.map((b) => `<option value="${esc(b.id)}">${esc(bins.binLabel(b, ctx.setsByNum))}</option>`).join('')}</select>
     <div class="row">
@@ -767,7 +767,7 @@ async function bulkMoveDialog(lines, ctx, from) {
   if (value !== 'ok') return false;
   try {
     const to = await bins.moveLines(ctx, lines, String(data.get('bin')));
-    toast(`Moved ${pl(total, 'piece', 'pieces')} to ${to.label}`);
+    toast(`Moved ${pl(total, 'brick', 'bricks')} to ${to.label}.`);
     return true;
   } catch (e) {
     toast(e.message || 'Could not move those.');
@@ -802,7 +802,7 @@ async function moveLineDialog(line, ctx, wm) {
   if (value !== 'ok') return false;
   try {
     const to = await bins.moveLine(ctx, line, String(data.get('bin')), Number(data.get('qty')));
-    toast(`Moved ${fmt(Number(data.get('qty')))} × ${line.name} to ${to.type === 'active' ? `Bin ${to.number}` : to.label}`);
+    toast(`Moved ${fmt(Number(data.get('qty')))} × ${line.name} to ${to.type === 'active' ? `Bin ${to.number}` : to.label}.`);
     return true;
   } catch (e) {
     toast(e.message || 'Could not move that.');
@@ -835,7 +835,7 @@ async function editLine(line, ctx, draft = {}) {
 
   const { value, data } = await openDialog(`
     <h2>${esc(line.name)}</h2>
-    <p class="hint">${unrec ? 'Unidentified piece' : esc(line.part_num)}</p>
+    <p class="hint">${unrec ? 'Unidentified brick' : esc(line.part_num)}</p>
     <label for="eq">Quantity</label>
     <input id="eq" name="qty" type="number" min="1" max="9999" step="1" required value="${esc(qtyVal)}" inputmode="numeric">
     <label for="ec">Colour</label>
@@ -852,7 +852,7 @@ async function editLine(line, ctx, draft = {}) {
     <label for="en">Note</label>
     <input id="en" name="note" maxlength="200" value="${esc(noteVal)}">
     <div class="row spread">
-      <button class="btn danger" value="delete" formnovalidate>Delete</button>
+      <button class="btn danger" value="delete" formnovalidate>Remove</button>
       <span class="grow"></span>
       <button class="btn" value="cancel" formnovalidate>Cancel</button>
       <button class="btn primary" value="save">Save</button>
@@ -873,9 +873,9 @@ async function editLine(line, ctx, draft = {}) {
   }
   const now = new Date().toISOString();
   if (value === 'delete') {
-    if (!(await ask({ title: 'Delete this line?', body: `${fmt(line.qty)} × ${line.name} (${line.color_name}) will be removed from the app.`, ok: 'Delete', danger: true }))) return false;
+    if (!(await ask({ title: 'Remove these bricks?', body: `${fmt(line.qty)} × ${line.name} (${line.color_name}) will be removed from the app. Everything else in the bin stays.`, ok: 'Remove', danger: true }))) return false;
     await db.put('inventory', { ...line, deleted: true, updated: now });
-    toast('Deleted.');
+    toast(`Removed ${fmt(line.qty)} × ${line.name}.`);
     return true;
   }
   if (value !== 'save') return false;
@@ -891,7 +891,7 @@ async function editLine(line, ctx, draft = {}) {
     const others = (ctx.byBin.get(targetBin.id) || [])
       .filter((l) => l.id !== line.id && l.part_num === line.part_num && l.color_id === colorId).reduce((n, l) => n + l.qty, 0);
     if (qty + others > need) {
-      toast(need ? `Bin ${targetBin.number}'s set only needs ${fmt(need)} of this piece in that colour.` : `Bin ${targetBin.number}'s set doesn't need this piece in that colour.`);
+      toast(need ? `Bin ${targetBin.number}’s set only needs ${fmt(need)} of this brick in that colour.` : `Bin ${targetBin.number}’s set doesn’t need this brick in that colour.`);
       return false;
     }
   }
@@ -908,6 +908,6 @@ async function editLine(line, ctx, draft = {}) {
     note: String(data.get('note') || '').trim(),
     updated: now,
   });
-  toast('Saved.');
+  toast(`Saved changes to ${line.name}.`);
   return true;
 }

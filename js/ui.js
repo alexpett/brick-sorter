@@ -13,6 +13,21 @@ export function decode(s) {
   return t.value;
 }
 
+// "just now", "2 hours ago", "yesterday", or a short date for anything older than a week.
+export function ago(when, now = Date.now()) {
+  const t = new Date(when).getTime();
+  if (!Number.isFinite(t)) return '';
+  const mins = Math.max(0, Math.round((now - t) / 60000));
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins} ${mins === 1 ? 'minute' : 'minutes'} ago`;
+  const hrs = Math.round(mins / 60);
+  if (hrs < 24) return `${hrs} ${hrs === 1 ? 'hour' : 'hours'} ago`;
+  const days = Math.round(hrs / 24);
+  if (days === 1) return 'yesterday';
+  if (days < 8) return `${days} days ago`;
+  return `on ${new Date(t).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}`;
+}
+
 export const fmt = (n) => Number(n || 0).toLocaleString('en-GB');
 export const safeRgb = (rgb) => (/^[0-9a-f]{6}$/i.test(rgb || '') ? rgb : '999999');
 
@@ -30,8 +45,8 @@ export function toast(msg) {
   toastTimer = setTimeout(() => el.classList.remove('show'), 3500);
 }
 
-// Shows html inside the shared <dialog>. Resolves with the clicked button's value
-// ('' if dismissed), or { value, data } with the form's fields when data is true.
+// Shows html inside the shared <dialog>. Resolves with the clicked button’s value
+// ('' if dismissed), or { value, data } with the form’s fields when data is true.
 export function openDialog(html, { data = false } = {}) {
   return new Promise((resolve) => {
     const d = $('#dlg');
@@ -53,13 +68,13 @@ export function openDialog(html, { data = false } = {}) {
       resolve(data ? { value, data: new FormData(d.querySelector('form')) } : value);
     };
     d.showModal();
-    // Don't pop the keyboard up: move focus off the first input to the dialog itself.
+    // Don’t pop the keyboard up: move focus off the first input to the dialog itself.
     d.setAttribute('tabindex', '-1');
     d.focus({ preventScroll: true });
   });
 }
 
-// A one-button alert the person has to dismiss (unlike a toast, it doesn't fade).
+// A one-button alert the person has to dismiss (unlike a toast, it doesn’t fade).
 export async function notify({ title, body, ok = 'OK' }) {
   await openDialog(`
     <h2>${esc(title)}</h2>

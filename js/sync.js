@@ -1,5 +1,5 @@
 // Backs the app up to a Google Sheet through an Apps Script web app (see apps-script/).
-// Sets, bins, sorted pieces, each set's parts list (in compact chunks) and a few settings are synced,
+// Sets, bins, sorted pieces, each set’s parts list (in compact chunks) and a few settings are synced,
 // so a new device or a cleared browser restores without asking Rebrickable again.
 // Newest "updated" time wins per record.
 import * as db from './db.js';
@@ -43,7 +43,7 @@ async function call(cfg, payload) {
       body: JSON.stringify({ token: cfg.token, ...payload }),
     });
   } catch {
-    throw new Error("Couldn't reach the sheet. Check your connection and the web app address.");
+    throw new Error("Couldn’t reach the sheet. Check your connection and the web app address.");
   }
   let json;
   try {
@@ -55,7 +55,7 @@ async function call(cfg, payload) {
   return json;
 }
 
-// Sends any request to the user's Apps Script (used by the camera as a fallback route).
+// Sends any request to the user’s Apps Script (used by the camera as a fallback route).
 export async function callScript(payload) {
   const cfg = await getConfig();
   if (!cfg.url || !cfg.token) throw new Error('Google Sheet backup is not set up.');
@@ -76,7 +76,7 @@ const scriptHasParts = async () => Number((await db.getSetting('scriptV')) || 0)
 const defaultImg = (pn, cid) => `https://cdn.rebrickable.com/media/parts/ldraw/${cid}/${encodeURIComponent(pn)}.png`;
 const packLine = (l) => [l.part_num, l.name, l.cat_id ?? null, l.color_id, l.qty, l.element_id || 0, l.sticker ? 1 : 0, l.img && l.img !== defaultImg(l.part_num, l.color_id) ? l.img : 0, l.figs?.length ? [l.fig_qty || 0, ...l.figs] : 0];
 
-// A set's parts as chunk records, each small enough for one sheet cell.
+// A set’s parts as chunk records, each small enough for one sheet cell.
 function chunkParts(setNum, at, rows) {
   const groups = [];
   let cur = [];

@@ -91,10 +91,11 @@ export function stepperHtml({ id, name, value, min = 1, max }) {
   </div>`;
 }
 
-export async function ask({ title, body, ok = 'OK', cancel = 'Cancel', danger = false }) {
+export async function ask({ title, body, ok = 'OK', cancel = 'Cancel', danger = false, warn = '' }) {
   const result = await openDialog(`
     <h2>${esc(title)}</h2>
     <p>${esc(body)}</p>
+    ${warn ? `<p class="warnline"><strong>${esc(warn)}</strong></p>` : ''}
     <div class="row">
       <button class="btn" value="cancel" formnovalidate>${esc(cancel)}</button>
       <button class="btn ${danger ? 'danger' : 'primary'}" value="ok">${esc(ok)}</button>

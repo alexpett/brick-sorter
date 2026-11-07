@@ -421,11 +421,11 @@ async function renderSet(setNum) {
     <a class="backlink" href="#/sets">‹ Sets</a>
     <section class="panel hero">
       ${await setPicture(rec, 'setimg big')}
+      <button type="button" class="iconbtn trash herotrash" id="removeSet" aria-label="Remove this set"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14M10 10v6M14 10v6"/></svg></button>
       <div>
         <h2 class="setname">${esc(rec.name)}</h2>
         <p class="cardmeta">${esc(rec.set_num)} · ${esc(rec.year)}</p>
-        <p class="setstats"><strong>${fmt(rec.pieces)}</strong> bricks · <strong>${fmt(rec.line_count)}</strong> kinds${
-          rec.sticker_lines ? ` · <strong>${fmt(rec.sticker_lines)}</strong> sticker` : ''}</p>
+        <p class="setstats"><strong>${fmt(rec.pieces)}</strong> bricks</p>
         <p class="hint">${rec.spares ? `${fmt(rec.spares)} spare bricks are not counted. ` : ''}${rec.figs_at ? 'Minifigure parts are included.' : 'Minifigure parts are not included.'}</p>
       </div>
     </section>
@@ -437,7 +437,6 @@ async function renderSet(setNum) {
     </section>
     <section class="panel actions">
       <button class="btn redout" id="refreshSet">Refresh from Rebrickable</button>
-      <button class="btn danger" id="removeSet">Remove this set</button>
     </section>`;
 
   const listEl = $('#partList');
@@ -474,6 +473,7 @@ async function renderSet(setNum) {
       body: `${rec.set_num} ${rec.name} will be removed from your list. You can add it again later.`,
       ok: 'Remove',
       danger: true,
+      warn: 'This cannot be undone.',
     });
     if (!ok) return;
     await db.delByIndex('setParts', 'set_num', rec.set_num);
@@ -696,6 +696,7 @@ async function renderSettings() {
       body: 'Every set, bin and sorted brick will be removed from this device, and from the Google Sheet if backup is on. Your API key stays.',
       ok: 'Remove everything',
       danger: true,
+      warn: 'This cannot be undone.',
     });
     if (!ok) return;
     // Soft delete so that, if backup is on, the deletion reaches the sheet too.

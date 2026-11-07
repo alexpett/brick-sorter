@@ -301,11 +301,14 @@ export async function renderBin(id, keepMode = false) {
         <button type="button" role="tab" data-mode="missing" aria-selected="${binMode === 'missing'}">Missing (${fmt(missingCount)})</button>
         <button type="button" role="tab" data-mode="found" aria-selected="${binMode === 'found'}">Found (${fmt(partCount(lines))})</button>
  </div>
-      ${binMode === 'missing' && pickCount ? `<button type="button" class="chip pickchip" id="pickToggle" aria-pressed="${pickOnly}">Bricks to pick: ${fmt(pickBricks)}</button>` : ''}` : ''}
+      ${binMode === 'missing' && pickCount ? `<button type="button" class="chip pickchip" id="pickToggle" aria-pressed="${pickOnly}">Bricks in storage: ${fmt(pickBricks)}</button>` : ''}` : ''}
       ${!isActive && wantedCount ? `<button type="button" class="chip pickchip" id="neededToggle" aria-pressed="${neededOnly}">Wanted by active sets: ${fmt(wantedCount)} ${wantedCount === 1 ? 'kind' : 'kinds'}</button>` : ''}
       ${(() => { const n = (!isAll && bin.type === 'storage' && bins.binPalette(bin).length) ? lines.filter((l) => !bins.acceptsColour(bin, l.color_id)).length : 0; return n ? `<button type="button" class="chip pickchip" id="offToggle" aria-pressed="${offOnly}">Outside this bin’s colour rule: ${fmt(n)} ${n === 1 ? 'kind' : 'kinds'}</button>` : ''; })()}
       <label for="filter" class="sr">Filter bricks</label>
-      <input id="filter" type="search" placeholder="Search name, part no. or colour" autocomplete="off">
+      <div class="searchrow">
+        <input id="filter" type="search" placeholder="Search name, part no. or colour" autocomplete="off">
+        <button type="button" class="btn small lozenge redout" id="cfBtn" hidden>Filter</button>
+      </div>
       <div class="colorfilter" id="colorChips"></div>
       <p class="hint" id="count"></p>
       <div id="bulkRow" class="bulkrow" hidden></div>
@@ -331,10 +334,9 @@ export async function renderBin(id, keepMode = false) {
   const drawChips = () => {
     const el = $('#colorChips');
     const cur = colorFilter === null ? null : chipMap.get(colorFilter);
-    el.hidden = chipMap.size < 2 && colorFilter === null;
-    el.innerHTML = `<button type="button" class="colorbtn${cur ? '' : ' empty'}" id="cfBtn" aria-label="Filter">
-        <span>Filter</span>${cur ? `<span class="swatch lg${cur.trans ? ' trans' : ''}" style="--c:#${esc(safe(cur.rgb))}"></span><span>${esc(cur.name)} · ${fmt(cur.n)}</span>` : ''}
-      </button>${cur ? '<button type="button" class="btn small" id="cfClear">Clear</button>' : ''}`;
+    $('#cfBtn').hidden = chipMap.size < 2 && colorFilter === null;
+    el.hidden = !cur;
+    el.innerHTML = cur ? `<span class="swatch lg${cur.trans ? ' trans' : ''}" style="--c:#${esc(safe(cur.rgb))}"></span><span class="grow">${esc(cur.name)} · ${fmt(cur.n)}</span><button type="button" class="btn small" id="cfClear">Clear</button>` : '';
   };
   const safe = (rgb) => (/^[0-9a-f]{6}$/i.test(rgb || '') ? rgb : '999999');
   let bulkShown = [];
@@ -358,11 +360,10 @@ export async function renderBin(id, keepMode = false) {
             <span class="pmeta">
               ${from ? '<br>' : ''}<span class="swatch${l.is_trans ? ' trans' : ''}" style="--c:#${esc(l.rgb)}"></span>
               ${esc(l.color_name)}${from ? '' : ` · ${esc(l.part_num)}`}${l.sticker ? ' <span class="tag">sticker</span>' : ''}
-              ${l.have && !from ? `<br>Have ${fmt(l.have)} of ${fmt(l.qty)}` : ''}
-              ${l.avail ? (from ? `<br><span class="tag sm ${from.qty >= l.rem ? 'ok' : 'bad'}">${fmt(from.qty)} available · ${fmt(l.rem)} required</span>` : `<br><span class="tag ${l.avail >= l.rem ? 'ok' : 'warn'}">In storage: ${fmt(l.avail)} · ${esc([...new Set(l.stock.map((x) => x.bin.label))].join(', '))}</span>`) : ''}
+              ${!from ? `<br><span class="tag sm bad">${fmt(l.rem)} required</span>${l.have ? ` <span class="tag sm">Have ${fmt(l.have)} of ${fmt(l.qty)}</span>` : ''}` : ''}
+              ${l.avail ? (from ? `<br><span class="tag sm ${from.qty >= l.rem ? 'ok' : 'bad'}">${fmt(from.qty)} available · ${fmt(l.rem)} required</span>` : `<br><span class="tag sm ${l.avail >= l.rem ? 'ok' : 'warn'}">In storage: ${fmt(l.avail)} · ${esc([...new Set(l.stock.map((x) => x.bin.label))].join(', '))}</span>`) : ''}
             </span>
           </span>
-          ${from ? '' : `<span class="qty">${fmt(l.rem)}</span>`}
           <span class="btns">
             ${(() => { const n = from ? Math.min(l.rem, from.qty) : l.rem;
               const step = `<div class="stepper pickstep" role="group" aria-label="Quantity"><button type="button" data-step="-1" aria-label="One fewer">−</button><input class="pqty" type="number" inputmode="numeric" min="1" max="${n}" step="1" value="1" aria-label="Quantity"><button type="button" data-step="1" aria-label="One more">+</button></div>`;
@@ -427,7 +428,8 @@ export async function renderBin(id, keepMode = false) {
   };
   drawChips();
   draw('');
-  $('#colorChips').addEventListener('click', async (e) => {
+  $('#colorChips').closest('.panel').addEventListener('click', async (e) => {
+    if (!e.target.closest('#cfClear, #cfBtn')) return;
     if (e.target.closest('#cfClear')) colorFilter = null;
     else if (e.target.closest('#cfBtn')) {
       for (;;) {
@@ -545,9 +547,9 @@ export async function renderBin(id, keepMode = false) {
   $('#delBin')?.addEventListener('click', async () => {
     const n = partCount(lines);
     const body = n
-      ? `${bin.label} and the ${fmt(n)} ${n === 1 ? 'brick' : 'bricks'} in it will be removed from the app. This can’t be undone. Any storage rules that point to it will ask again next time.`
+      ? `${bin.label} and the ${fmt(n)} ${n === 1 ? 'brick' : 'bricks'} in it will be removed from the app. Any storage rules that point to it will ask again next time.`
       : `${bin.label} is empty and will be removed. Any storage rules that point to it will ask again next time.`;
-    if (!(await ask({ title: `Remove ${bin.label}?`, body, ok: 'Remove', danger: true }))) return;
+    if (!(await ask({ title: `Remove ${bin.label}?`, body, ok: 'Remove', danger: true, warn: n ? 'This cannot be undone.' : '' }))) return;
     try {
       const res = await bins.deleteStorageBin(bin.id);
       location.hash = '#/bins';
@@ -567,13 +569,14 @@ export async function confirmAbandon(binId) {
   const set = ctx.setsByNum.get(bin.set_num);
   const name = `Bin ${bin.number}${set ? ` (${set.name})` : ''}`;
   const body = bricks
-    ? `The ${fmt(bricks)} ${bricks === 1 ? 'brick' : 'bricks'} sorted into this bin will be removed from the app. This can’t be undone. The set stays in your catalogue and you can start it again later.`
+    ? `The ${fmt(bricks)} ${bricks === 1 ? 'brick' : 'bricks'} sorted into this bin will be removed from the app. The set stays in your catalogue and you can start it again later.`
     : 'This bin is empty. The set stays in your catalogue and you can start it again later.';
   const ok = await ask({
     title: `Remove ${name}?`,
     body,
     ok: 'Remove',
     danger: true,
+    warn: bricks ? 'This cannot be undone.' : '',
   });
   if (!ok) return false;
   const res = await bins.abandonBin(binId);
@@ -949,6 +952,8 @@ async function editLine(line, ctx, draft = {}) {
     note: String(data.get('note') || '').trim(),
     updated: now,
   });
-  toast(`Saved changes to ${line.name}.`);
+  if (targetBin && targetBin.id !== line.bin_id) {
+    toast(`Moved ${fmt(qty)} × ${line.name} to ${targetBin.type === 'active' ? `Bin ${targetBin.number}` : targetBin.label}.`);
+  } else toast(`Saved changes to ${line.name}.`);
   return true;
 }

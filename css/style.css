@@ -356,7 +356,7 @@ dialog .row { justify-content: flex-end; }
   min-height: 44px; padding: 4px 14px; font: inherit; font-weight: 600; color: var(--text);
   background: var(--bg); border: 1px solid var(--border); border-radius: 999px; cursor: pointer;
 }
-.chip[aria-pressed="true"] { color: var(--accent-ink); background: var(--warn); border-color: var(--warn); }
+.chip[aria-pressed="true"] { color: #fff; background: var(--neutral); border-color: var(--neutral); }
 .tag.ok { color: var(--ok); border-color: var(--ok); }
 
 .dest { list-style: none; margin: 0 0 4px; padding: 0; display: grid; gap: 10px; }
@@ -602,11 +602,12 @@ dialog .colorbtn { width: 100%; }
 
 /* quick undo after a save: a round button in a faded tint of the app colour */
 #undoPill {
-  position: fixed; right: 14px; z-index: 21;
-  bottom: calc(var(--tab-h) + env(safe-area-inset-bottom) + 112px);
+  position: fixed; left: 50%; z-index: 21;
+  bottom: calc(var(--tab-h) + env(safe-area-inset-bottom) + 70px);
+  margin-left: -24px;
   width: 48px; height: 48px; padding: 0; display: grid; place-items: center;
   border-radius: 50%; border: 0; font: inherit; font-size: 1.6rem; line-height: 1;
-  color: #fff; background: color-mix(in srgb, var(--accent) 62%, transparent);
+  color: #fff; background: color-mix(in srgb, var(--neutral) 90%, transparent);
   box-shadow: 0 2px 8px rgba(0,0,0,.2);
   opacity: 0; transform: translateY(8px); pointer-events: none; cursor: pointer;
   transition: opacity .9s ease-in .2s, transform .25s;
@@ -728,3 +729,9 @@ a.btn.primary { color: var(--accent-ink); }
 .searchrow .btn { flex: none; min-height: 44px; }
 #scanRoot .searchrow #q { margin-bottom: 0; }
 #scanRoot .filterline { margin: 6px 0 0; }
+.warnline { color: var(--danger); margin-top: 0; }
+.herotrash { order: 3; margin-left: auto; flex: none; }
+
+/* stud on the Store tile code chip */
+.binchip.store.big { position: relative; }
+.binchip.store.big::before { content: ""; position: absolute; inset: 8%; border-radius: 50%; border: 2px solid rgba(0,0,0,.22); background: radial-gradient(circle at 32% 30%, rgba(255,255,255,.35), rgba(255,255,255,0) 55%); pointer-events: none; }

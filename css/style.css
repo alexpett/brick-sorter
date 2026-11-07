@@ -652,3 +652,9 @@ button.swcell.empty { cursor: pointer; opacity: .7; }
 .binfoot .btn { min-height: 44px; }
 .ordfmt input { flex: 0 0 20px; width: 20px; height: 20px; margin: 2px 0 0; }
 .ordfmt span { flex: 1; min-width: 0; }
+
+/* Camera screen buttons */
+.camchip { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; min-width: 44px; padding: 0 14px; box-sizing: border-box; }
+label.camchip { cursor: pointer; }
+.viewer-msg { font-size: .95rem; }
+#scanRoot #q { margin-bottom: 8px; }

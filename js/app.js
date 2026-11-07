@@ -6,7 +6,6 @@ import { pickColor, refreshInfo as refreshSorterInfo } from './screens/sorter.js
 import * as bins from './bins.js';
 import * as sync from './sync.js';
 import { $, view, esc, decode, fmt, safeRgb, setTitle, toast, openDialog, ask } from './ui.js';
-import { renderAdd } from './screens/add.js';
 import { renderScan, stopCamera } from './screens/scan.js';
 import { renderHome } from './screens/home.js';
 import { renderBins, renderBin, confirmAbandon, exportSorting, drawRules } from './screens/bins.js';
@@ -156,7 +155,7 @@ const routes = {
   home: renderHome,
   sets: renderSets,
   set: renderSet,
-  add: renderAdd,
+  add: renderScan,
   scan: renderScan,
   bins: renderBins,
   bin: renderBin,

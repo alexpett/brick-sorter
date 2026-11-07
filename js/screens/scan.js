@@ -5,13 +5,15 @@ import * as recog from '../recog.js';
 import * as rb from '../rebrickable.js';
 import * as db from '../db.js';
 import { view, esc, toast, openDialog, setTitle } from '../ui.js';
-import { createSorter, hideUndo, info, refreshInfo, loadColorState, partTag } from './sorter.js';
+import { createSorter, hideUndo, info, refreshInfo, loadColorState, partTag, thumb } from './sorter.js';
 
 let stream = null;
 let root = null;
 let busy = false;
 let sorter = null;
 let lastItems = [];
+let results = []; // typed-search results
+let query = '';
 const resolved = new Map(); // brickognize id (lower) -> part | null, filled by lookups
 
 export function stopCamera() {
@@ -22,7 +24,7 @@ export function stopCamera() {
 const $r = (sel) => root?.querySelector(sel);
 
 export async function renderScan() {
-  setTitle('Scan a piece');
+  setTitle('Log pieces');
   busy = false;
   lastItems = [];
   try { await refdata.loadRef(); } catch (e) {
@@ -40,10 +42,10 @@ export async function renderScan() {
           <p class="viewer-msg" id="viewerMsg"></p>
         </div>
         <div class="shutterrow">
-          <label class="btn small" for="filePick">Choose photo</label>
+          <label class="chip addbin camchip" for="filePick" role="button" aria-label="Upload a photo"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 16V4M7 9l5-5 5 5M4 15v4a1 1 0 001 1h14a1 1 0 001-1v-4"/></svg></label>
           <input type="file" id="filePick" accept="image/*" capture="environment" hidden>
-          <button type="button" class="shutter" id="shutter" aria-label="Take photo"><span></span></button>
-          <a class="btn small" href="#/add">Search by hand</a>
+          <button type="button" class="shutter" id="shutter" aria-label="Start the camera"><span></span></button>
+          <button type="button" class="chip addbin camchip" id="descBtn"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h10"/></svg>Description</button>
         </div>
       </section>
       <section class="panel" id="matches"></section>
@@ -56,18 +58,20 @@ export async function renderScan() {
     onChangePart: () => { root.classList.remove('compact'); $r('#matches').hidden = false; },
   });
   root.addEventListener('click', onClick);
+  root.addEventListener('input', (e) => { if (e.target.id === 'q') { query = e.target.value; drawResults(); } });
   $r('#filePick').addEventListener('change', onFile);
+  query = '';
   showLive();
-  await startCamera();
 }
 
 async function startCamera() {
   const msg = $r('#viewerMsg');
   if (!navigator.mediaDevices?.getUserMedia) {
-    msg.textContent = 'This browser can’t open the camera here. Use Choose photo instead.';
+    msg.textContent = 'This browser can’t open the camera here. Use the upload button instead.';
     $r('#shutter').disabled = true;
     return;
   }
+  msg.textContent = '';
   try {
     stopCamera();
     stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 } }, audio: false });
@@ -77,7 +81,7 @@ async function startCamera() {
     await v.play().catch(() => {});
     msg.textContent = '';
   } catch {
-    msg.textContent = 'The camera isn’t available (permission refused?). Use Choose photo instead.';
+    msg.textContent = 'The camera isn’t available (permission refused?). Use the upload button instead.';
     $r('#shutter').disabled = true;
   }
 }
@@ -91,11 +95,38 @@ function showLive() {
   $r('#cam').hidden = false;
   const sh = $r('#shutter');
   sh.classList.remove('again');
-  sh.setAttribute('aria-label', 'Take photo');
+  sh.setAttribute('aria-label', stream ? 'Take photo' : 'Start the camera');
+  if (!stream && !$r('#viewerMsg').textContent) $r('#viewerMsg').textContent = 'Tap the round button to start the camera';
+  query = '';
+  drawSearch();
+  window.scrollTo(0, 0);
+}
+
+// The typed search sits under the camera until a photo is taken.
+function drawSearch() {
   const m = $r('#matches');
   m.hidden = false;
-  m.innerHTML = '<p class="hint">Put one piece in view and press the round button.</p>';
-  window.scrollTo(0, 0);
+  m.innerHTML = `
+    <label for="q" class="sr">Search parts</label>
+    <input id="q" type="search" placeholder="Part number or words, e.g. 3001 or plate 2 x 4" autocomplete="off" autocapitalize="off" spellcheck="false">
+    <div id="results" aria-live="polite"></div>
+    <button class="btn block" id="unrec" type="button">I can’t identify this piece</button>`;
+  $r('#q').value = query;
+  drawResults();
+}
+
+function drawResults() {
+  const el = $r('#results');
+  if (!el) return;
+  if (!query.trim()) { results = []; el.innerHTML = '<p class="hint">Parts from your sets are listed first.</p>'; return; }
+  results = refdata.searchParts(query, info.yours, 40);
+  if (!results.length) { el.innerHTML = '<p class="empty">No parts match.</p>'; return; }
+  el.innerHTML = `<ul class="parts results">${results.map((p, i) => `
+    <li><button type="button" class="result" data-pick="${i}">
+      ${thumb(p.part_num, null)}
+      <span class="pinfo"><span class="pname">${esc(p.name)}</span>
+      <span class="pmeta">${esc(p.part_num)} · ${esc(refdata.categoryName(p.cat_id))}${partTag(p.part_num)}</span></span>
+    </button></li>`).join('')}</ul>`;
 }
 
 async function select(part) {
@@ -106,15 +137,23 @@ async function select(part) {
 }
 
 async function onClick(e) {
+  if (e.target.closest('#descBtn')) {
+    if ($r('#shutter').classList.contains('again') || !$r('#q')) showLive();
+    const q = $r('#q'); q.scrollIntoView({ block: 'center', behavior: 'smooth' }); q.focus();
+    return;
+  }
   if (e.target.closest('#shutter')) {
     hideUndo(); // using the camera again: the last save is settled
     if (busy) return;
+    if (!stream) { await startCamera(); showLive(); return; } // the first tap switches the camera on
     if ($r('#shutter').classList.contains('again')) { showLive(); return; }
     const v = $r('#cam');
     if (!v || !v.videoWidth) { toast('The camera isn’t ready yet.'); return; }
     await handle(v, recog.visibleCrop(v)); // send only what the viewer shows
     return;
   }
+  const typed = e.target.closest('[data-pick]');
+  if (typed) { await select(results[Number(typed.dataset.pick)]); return; }
   const pick = e.target.closest('[data-part]');
   if (pick) { await select(JSON.parse(pick.dataset.part)); return; }
   if (e.target.closest('#unrec')) { await select({ unrec: true, part_num: '', name: 'Unrecognised piece', cat_id: null }); return; }

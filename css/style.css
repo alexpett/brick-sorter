@@ -735,3 +735,7 @@ a.btn.primary { color: var(--accent-ink); }
 /* stud on the Store tile code chip */
 .binchip.store.big { position: relative; }
 .binchip.store.big::before { content: ""; position: absolute; inset: 8%; border-radius: 50%; border: 2px solid rgba(0,0,0,.22); background: radial-gradient(circle at 32% 30%, rgba(255,255,255,.35), rgba(255,255,255,0) 55%); pointer-events: none; }
+
+/* frame + glass logging */
+.glassrow { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 8px 0; }
+.glassrow .hint { flex-basis: 100%; margin: 0; }

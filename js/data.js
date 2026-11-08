@@ -77,6 +77,15 @@ export function pickerColors() {
     .sort((a, b) => Number(a.is_trans) - Number(b.is_trans) || a.name.localeCompare(b.name));
 }
 
+// Window frames that are normally sold with glass, and the part number of that glass.
+const GLASS_FOR = { 60592: '60601', 60593: '60602', 60594: '60603', 3853: '3855' };
+export const CLEAR_GLASS = 47; // Trans-Clear
+export function glassFor(partNum) {
+  const g = GLASS_FOR[String(partNum)];
+  const i = g === undefined ? undefined : ref.byNum.get(g);
+  return i === undefined ? null : { part_num: ref.parts[i][0], name: ref.parts[i][1], cat_id: ref.parts[i][2] };
+}
+
 // The scanner returns BrickLink numbers, which are not always Rebrickable’s. Best local guess:
 // drop the print suffix (87079pb0722L -> 87079), drop an assembly suffix (60592c01 -> 60592, a window with its
 // glass already fitted), and try the usual letter variants (3069 -> 3069b).

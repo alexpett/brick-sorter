@@ -272,7 +272,7 @@ export function offerUndo(fn, label = 'Undo last save') {
 }
 
 export function createSorter(el, { onSaved, onChangePart, onUndo } = {}) {
-  const st = { part: null, qtyText: '1', flags: { sticker: false, printed: false, other: false }, note: '', saving: false, sugOpen: true };
+  const st = { glass: { on: false, colorId: refdata.CLEAR_GLASS }, part: null, qtyText: '1', flags: { sticker: false, printed: false, other: false }, note: '', saving: false, sugOpen: true };
   el.classList.add('sorter');
   el.hidden = true;
 
@@ -316,6 +316,18 @@ export function createSorter(el, { onSaved, onChangePart, onUndo } = {}) {
     </div>`;
   }
 
+  // Frames that come with glass: log the glass at the same time, in its own colour (Trans-Clear unless changed).
+  function glassHtml() {
+    const g = st.part && !st.part.unrec ? refdata.glassFor(st.part.part_num) : null;
+    if (!g) return '';
+    const gc = colorOf(st.glass.colorId);
+    return `<div class="glassrow">
+      <button type="button" class="chip" id="glassToggle" aria-pressed="${st.glass.on}">With glass</button>
+      ${st.glass.on ? `<button type="button" class="colorbtn colortile" id="glassColorBtn" aria-label="Glass colour">${gc ? `${swatchHtml(gc, ' lg')}<span>Glass: ${esc(gc.name)}</span>` : '<span>Choose the glass colour</span>'}</button>` : ''}
+      ${st.glass.on ? `<p class="hint">Also logs ${esc(g.part_num)} ${esc(g.name)}.</p>` : ''}
+    </div>`;
+  }
+
   function renderTop() {
     const p = st.part;
     if (!p) { el.hidden = true; el.innerHTML = ''; return; }
@@ -341,6 +353,7 @@ export function createSorter(el, { onSaved, onChangePart, onUndo } = {}) {
         </div>
       </div>
       ${suggestionsHtml()}
+      ${glassHtml()}
       <div class="flagrow" role="group" aria-label="Flags">
         ${FLAGS.map(([id, label]) => `<button type="button" class="chip" data-flag="${id}" aria-pressed="${st.flags[id]}">${esc(label)}</button>`).join('')}
       </div>
@@ -480,12 +493,32 @@ export function createSorter(el, { onSaved, onChangePart, onUndo } = {}) {
       }
       const suggestedStore = part.unrec ? null : bins.resolveStorage(info.ctx, part, colorId);
       const rulesBefore = await bins.rulesSnapshot();
-      const before = { part, colorId, qty: st.qtyText, flags: { ...st.flags }, note: st.note };
-      const receipt = await bins.saveToBins({ part, color: colorOf(colorId), flags: st.flags, note: st.note.trim(), items });
+      const before = { glass: { ...st.glass }, part, colorId, qty: st.qtyText, flags: { ...st.flags }, note: st.note };
+      let receipt = await bins.saveToBins({ part, color: colorOf(colorId), flags: st.flags, note: st.note.trim(), items });
+      const glassPart = !part.unrec && st.glass.on ? refdata.glassFor(part.part_num) : null;
+      let glassNote = '';
+      if (glassPart && colorOf(st.glass.colorId)) {
+        const gItems = [];
+        let skipped = 0;
+        for (const it of items) {
+          const b = info.ctx.bins.find((x) => x.id === it.binId);
+          let binId = it.binId;
+          if (b?.type === 'active') {
+            const e = (info.neededBy.get(glassPart.part_num) || []).find((x) => x.bin.id === b.id && x.colorId === st.glass.colorId);
+            if (!e || e.rem < it.qty) binId = bins.resolveStorage(info.ctx, glassPart, st.glass.colorId); // the set doesn’t need it: store it
+          }
+          if (binId) gItems.push({ binId, qty: it.qty }); else skipped += it.qty;
+        }
+        if (gItems.length) {
+          const gr = await bins.saveToBins({ part: glassPart, color: colorOf(st.glass.colorId), flags: { sticker: false, printed: false, other: false }, note: '', items: gItems });
+          receipt = { log: [...receipt.log, ...gr.log], inv: [...receipt.inv, ...gr.inv] };
+        }
+        glassNote = skipped ? ` Glass for ${fmt(skipped)} has no bin yet, so log it separately.` : ' Glass saved too.';
+      }
       offerUndo(async () => {
         await bins.undoSave(receipt, rulesBefore);
         await refreshInfo();
-        Object.assign(st, { part: before.part, qtyText: before.qty, flags: before.flags, note: before.note, sugOpen: true });
+        Object.assign(st, { glass: before.glass, part: before.part, qtyText: before.qty, flags: before.flags, note: before.note, sugOpen: true });
         await chooseColor(before.colorId);
         onUndo?.();
         renderTop();
@@ -504,7 +537,7 @@ export function createSorter(el, { onSaved, onChangePart, onUndo } = {}) {
           catName: part.cat_id != null ? refdata.categoryName(part.cat_id) : '',
         });
       }
-      toast(`Saved to ${where}.${extra}`);
+      toast(`Saved to ${where}.${glassNote}${extra}`);
       await refreshInfo();
       if (keep > 0) {
         // Only part of the quantity fitted in that bin: keep the brick in the panel for the rest.
@@ -533,7 +566,7 @@ export function createSorter(el, { onSaved, onChangePart, onUndo } = {}) {
   }
 
   el.addEventListener('click', async (e) => {
-    const t = e.target.closest('[data-bin],[data-flag],[data-usecolor],#changePart,#colorBtn,#showSug,[data-addbin],#qtyMinus,#qtyPlus,#useSplit');
+    const t = e.target.closest('[data-bin],[data-flag],[data-usecolor],#changePart,#colorBtn,#showSug,#glassToggle,#glassColorBtn,[data-addbin],#qtyMinus,#qtyPlus,#useSplit');
     if (!t) return;
     if (t.dataset.addbin) { await addBinFlow(); return; }
     if (t.dataset.bin) {
@@ -560,6 +593,12 @@ export function createSorter(el, { onSaved, onChangePart, onUndo } = {}) {
     }
     switch (t.id) {
       case 'showSug': st.sugOpen = true; renderTop(); break;
+      case 'glassToggle': st.glass.on = !st.glass.on; renderTop(); break;
+      case 'glassColorBtn': {
+        const id = await pickColor(st.glass.colorId, { swatch: true });
+        if (id !== null) { st.glass.colorId = id; renderTop(); }
+        break;
+      }
       case 'changePart': st.part = null; renderTop(); onChangePart?.(); break;
       case 'colorBtn': {
         const id = await pickColor(undefined, { swatch: true });
@@ -586,6 +625,7 @@ export function createSorter(el, { onSaved, onChangePart, onUndo } = {}) {
     async setPart(part) {
       hideUndo();
       st.part = part;
+      st.glass = { on: !!part.assembly, colorId: refdata.CLEAR_GLASS }; // a camera hit on an assembled part means the glass is fitted
       st.sugOpen = true;
       st.qtyText = '1';
       st.note = '';

@@ -54,7 +54,7 @@ export async function renderScan() {
     </div>`;
   root = view.querySelector('#scanRoot');
   sorter = createSorter($r('#sorterBox'), {
-    onSaved: () => showLive(),
+    onSaved: () => showLive(true),
     onUndo: () => { root.classList.add('compact'); $r('#matches').hidden = true; },
     onChangePart: () => { root.classList.remove('compact'); $r('#matches').hidden = false; },
   });
@@ -88,7 +88,7 @@ async function startCamera() {
 }
 
 // Back to the live camera, ready for the next piece.
-function showLive() {
+function showLive(keepSearch = false) {
   if (!root?.isConnected) return;
   sorter?.clear();
   root.classList.remove('compact');
@@ -98,7 +98,7 @@ function showLive() {
   sh.classList.remove('again');
   sh.setAttribute('aria-label', stream ? 'Take photo' : 'Start the camera');
   if (!stream && !$r('#viewerMsg').textContent) $r('#viewerMsg').textContent = 'Tap the round button to start the camera';
-  query = '';
+  if (!keepSearch) query = '';
   drawSearch();
   window.scrollTo(0, 0);
 }

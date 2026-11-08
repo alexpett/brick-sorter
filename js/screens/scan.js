@@ -272,7 +272,7 @@ function drawMatches(items) {
       <span class="thumb">${it.img ? `<img src="${esc(it.img)}" alt="" loading="lazy">` : ''}</span>
       <span class="pinfo">
         <span class="pname">${esc(part ? part.name : it.name)}</span>
-        <span class="pmeta">${esc(it.id)}${part ? `${mapped ? ` → ${esc(part.part_num)}${part.approx ? ' (plain version)' : ''}` : ''}${partTag(part.part_num)}` : pending ? ' · looking up…' : ' · not in the parts catalogue'}</span>
+        <span class="pmeta">${esc(it.id)}${part ? `${mapped ? ` → ${esc(part.part_num)}${part.assembly ? ' (without the glass or other fitted parts)' : part.approx ? ' (plain version)' : ''}` : ''}${partTag(part.part_num)}` : pending ? ' · looking up…' : ' · not in the parts catalogue'}</span>
       </span>
       ${score}`;
     return part

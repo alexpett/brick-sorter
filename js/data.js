@@ -78,14 +78,16 @@ export function pickerColors() {
 }
 
 // The scanner returns BrickLink numbers, which are not always Rebrickable’s. Best local guess:
-// drop the print suffix (87079pb0722L -> 87079) and try the usual letter variants (3069 -> 3069b).
+// drop the print suffix (87079pb0722L -> 87079), drop an assembly suffix (60592c01 -> 60592, a window with its
+// glass already fitted), and try the usual letter variants (3069 -> 3069b).
 export function guessCatalogue(id) {
   const lower = String(id).toLowerCase();
-  const base = lower.replace(/pb\d+[a-z]*$/, '').replace(/(pr|pat)\d+[a-z]*$/, '');
+  const unassembled = lower.replace(/c\d+(pb\d+|pr\d+)?[a-z]*$/, '');
+  const base = unassembled.replace(/pb\d+[a-z]*$/, '').replace(/(pr|pat)\d+[a-z]*$/, '');
   const tries = [...new Set([base, `${base}b`, `${base}a`, `${base}c`])].filter((x) => x !== lower);
   for (const t of tries) {
     const i = ref.byNum.get(t);
-    if (i !== undefined) return { part_num: ref.parts[i][0], name: ref.parts[i][1], cat_id: ref.parts[i][2], approx: true };
+    if (i !== undefined) return { part_num: ref.parts[i][0], name: ref.parts[i][1], cat_id: ref.parts[i][2], approx: true, assembly: unassembled !== lower };
   }
   return null;
 }

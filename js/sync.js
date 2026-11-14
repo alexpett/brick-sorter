@@ -5,7 +5,7 @@
 import * as db from './db.js';
 
 const TABLES = ['sets', 'bins', 'inventory'];
-const SETTING_KEYS = ['categoryMap', 'partOverrides', 'recentColors', 'lastColor', 'dailyGoal', 'badgesSeen', 'goalDay', 'swatch', 'swatchDefault', 'includeFigs', 'orderFormat', 'wheelTyres'];
+const SETTING_KEYS = ['categoryMap', 'partOverrides', 'recentColors', 'lastColor', 'dailyGoal', 'badgesSeen', 'goalDay', 'swatch', 'swatchDefault', 'includeFigs', 'orderFormat', 'wheelTyres', 'tyreFits'];
 const CHUNK = 400;
 const CELL = 38000; // a sheet cell holds 50,000 characters; parts chunks stay well under
 const BATCH_BYTES = 2_000_000;

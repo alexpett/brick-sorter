@@ -4,6 +4,7 @@ import * as db from '../db.js';
 import * as refdata from '../data.js';
 import * as swatchLib from '../swatch.js';
 import * as bins from '../bins.js';
+import * as fitsLib from '../fits.js';
 import { $, esc, fmt, toast, notify, openDialog } from '../ui.js';
 import { celebrate } from '../rewards.js';
 
@@ -331,19 +332,29 @@ export function createSorter(el, { onSaved, onChangePart, onUndo } = {}) {
     </div>`;
   }
 
-  // Pick the tyre that goes on this wheel: same-width tyres first, with a search for the rest.
+  // Pick the tyre for this wheel: only tyres seen with it in a set (with a picture), or search them all.
   async function chooseTyre() {
+    toast('Looking up which tyres fit…');
+    const { tyres: fits, note } = await fitsLib.tyresSeenWith(st.part.part_num);
     let q = '';
+    let all = false;
+    const row = (t, extra) => `<li><button class="result" value="t:${esc(t.part_num)}" formnovalidate>
+      <span class="thumb"><img src="${esc(refdata.partImg(t.part_num, refdata.BLACK))}" alt="" loading="lazy"></span>
+      <span class="pinfo"><span class="pname">${esc(t.name)}</span><span class="pmeta">${esc(t.part_num)}${extra}</span></span></button></li>`;
     for (;;) {
-      const list = refdata.tyresFor(st.part, q).slice(0, 30);
+      const list = all ? refdata.tyresFor(st.part, q).slice(0, 30) : fits.slice(0, 12);
       const { value, data } = await openDialog(`
         <h2>Choose the tyre</h2>
-        <label for="tq" class="sr">Search tyres</label>
+        ${all ? `<label for="tq" class="sr">Search tyres</label>
         <div class="searchrow"><input id="tq" name="q" type="search" placeholder="e.g. 24 x 14" autocomplete="off" value="${esc(q)}"><button class="btn lozenge" value="search" formnovalidate>Search</button></div>
-        <ul class="parts results">${list.map((t) => `<li><button class="result" value="t:${esc(t.part_num)}" formnovalidate><span class="pinfo"><span class="pname">${esc(t.name)}</span><span class="pmeta">${esc(t.part_num)}${t.near ? ' · same width' : ''}</span></span></button></li>`).join('') || '<li class="empty">No tyres match.</li>'}</ul>
-        <div class="row"><button class="btn" value="cancel" formnovalidate>Cancel</button></div>`, { data: true });
+        <p class="hint">These are all tyres. Check the tyre fits before you log it.</p>`
+          : `<p class="hint">${fits.length ? 'Tyres that come with this wheel in the same number in a set.' : 'No fit information for this wheel yet.'}${note ? ` ${esc(note)}` : ''}</p>`}
+        <ul class="parts results">${list.map((t) => row(t, all ? '' : (t.seen >= 100 ? ' · you used this before' : ` · in ${t.seen} ${t.seen === 1 ? 'set' : 'sets'}`))).join('') || '<li class="empty">No tyres match.</li>'}</ul>
+        <div class="row spread"><button class="btn" value="cancel" formnovalidate>Cancel</button>${all ? '<button class="btn" value="fits" formnovalidate>Only tyres that fit</button>' : '<button class="btn" value="all" formnovalidate>Show all tyres</button>'}</div>`, { data: true });
+      if (value === 'all') { all = true; continue; }
+      if (value === 'fits') { all = false; continue; }
       if (value === 'search') { q = String(data.get('q') || ''); continue; }
-      if (typeof value === 'string' && value.startsWith('t:')) return list.find((t) => t.part_num === value.slice(2)) || null;
+      if (typeof value === 'string' && value.startsWith('t:')) return [...fits, ...list].find((t) => t.part_num === value.slice(2)) || null;
       return null;
     }
   }

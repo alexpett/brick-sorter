@@ -87,8 +87,8 @@ export function companionKind(part) {
   if (glassFor(part.part_num)) return 'glass';
   return part.cat_id === 29 && /^Wheel\b/i.test(part.name || '') ? 'tyre' : null;
 }
-// Tyres for a wheel, those with the same width first (Wheel 18 x 14 -> Tyre 24 x 14), then the rest.
-export function tyresFor(wheel, query = '') {
+// Tyres, the ones you use most first (usage: part_num -> count), then same width as the wheel, then by name.
+export function tyresFor(wheel, query = '', usage = new Map()) {
   const w = /(\d+(?:\.\d+)?) x (\d+(?:\.\d+)?)/.exec(wheel?.name || '');
   const terms = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
   const out = [];
@@ -98,9 +98,9 @@ export function tyresFor(wheel, query = '') {
     const hay = ref.lower[i];
     if (terms.some((t) => !hay.includes(t))) continue;
     const m = /(\d+(?:\.\d+)?) x (\d+(?:\.\d+)?)/.exec(name);
-    out.push({ part_num: num, name, cat_id: cat, near: !!(w && m && m[2] === w[2]) });
+    out.push({ part_num: num, name, cat_id: cat, used: usage.get(String(num)) || 0, near: !!(w && m && m[2] === w[2]) });
   }
-  return out.sort((a, b) => Number(b.near) - Number(a.near) || a.name.localeCompare(b.name));
+  return out.sort((a, b) => b.used - a.used || Number(b.near) - Number(a.near) || a.name.localeCompare(b.name));
 }
 export function glassFor(partNum) {
   const g = GLASS_FOR[String(partNum)];

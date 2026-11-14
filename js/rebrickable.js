@@ -124,16 +124,6 @@ export async function findByBricklink(id, key) {
   return data.results || [];
 }
 
-// Which colours a part comes in, and which sets contain it in one colour (used to see what it is sold with).
-export async function getPartColors(partNum, key) {
-  const data = await call(`/parts/${encodeURIComponent(partNum)}/colors/`, { page_size: 100 }, key);
-  return data.results || [];
-}
-export async function getPartColorSets(partNum, colorId, key) {
-  const data = await call(`/parts/${encodeURIComponent(partNum)}/colors/${colorId}/sets/`, { page_size: 100 }, key);
-  return data.results || [];
-}
-
 export function getCategories(key) {
   return allPages('/part_categories/', { page_size: 1000 }, key);
 }

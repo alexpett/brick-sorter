@@ -272,7 +272,7 @@ export function offerUndo(fn, label = 'Undo last save') {
 }
 
 export function createSorter(el, { onSaved, onChangePart, onUndo } = {}) {
-  const st = { glass: { on: false, colorId: refdata.CLEAR_GLASS }, part: null, qtyText: '1', flags: { sticker: false, printed: false, other: false }, note: '', saving: false, sugOpen: true };
+  const st = { comp: { on: false, colorId: refdata.CLEAR_GLASS, part: null }, part: null, qtyText: '1', flags: { sticker: false, printed: false, other: false }, note: '', saving: false, sugOpen: true };
   el.classList.add('sorter');
   el.hidden = true;
 
@@ -316,16 +316,36 @@ export function createSorter(el, { onSaved, onChangePart, onUndo } = {}) {
     </div>`;
   }
 
-  // Frames that come with glass: log the glass at the same time, in its own colour (Trans-Clear unless changed).
+  // Things that come as a pair: a frame and its glass, or a wheel and its tyre. Logged together, each in its own colour.
   function glassHtml() {
-    const g = st.part && !st.part.unrec ? refdata.glassFor(st.part.part_num) : null;
-    if (!g) return '';
-    const gc = colorOf(st.glass.colorId);
+    const kind = refdata.companionKind(st.part);
+    if (!kind) return '';
+    const word = kind === 'glass' ? 'glass' : 'tyre';
+    const c = st.comp;
+    const cc = colorOf(c.colorId);
     return `<div class="glassrow">
-      <button type="button" class="chip" id="glassToggle" aria-pressed="${st.glass.on}">With glass</button>
-      ${st.glass.on ? `<button type="button" class="colorbtn colortile" id="glassColorBtn" aria-label="Glass colour">${gc ? `${swatchHtml(gc, ' lg')}<span>Glass: ${esc(gc.name)}</span>` : '<span>Choose the glass colour</span>'}</button>` : ''}
-      ${st.glass.on ? `<p class="hint">Also logs ${esc(g.part_num)} ${esc(g.name)}.</p>` : ''}
+      <button type="button" class="chip" id="glassToggle" aria-pressed="${c.on}">With ${word}</button>
+      ${c.on && kind === 'tyre' ? `<button type="button" class="btn lozenge${c.part ? '' : ' primary'}" id="tyreBtn">${c.part ? `Tyre: ${esc(c.part.name)}` : 'Choose the tyre'}</button>` : ''}
+      ${c.on ? `<button type="button" class="colorbtn colortile" id="glassColorBtn" aria-label="${word} colour">${cc ? `${swatchHtml(cc, ' lg')}<span>${kind === 'glass' ? 'Glass' : 'Tyre'}: ${esc(cc.name)}</span>` : `<span>Choose the ${word} colour</span>`}</button>` : ''}
+      ${c.on && c.part ? `<p class="hint">Also logs ${esc(c.part.part_num)} ${esc(c.part.name)}.</p>` : ''}
     </div>`;
+  }
+
+  // Pick the tyre that goes on this wheel: same-width tyres first, with a search for the rest.
+  async function chooseTyre() {
+    let q = '';
+    for (;;) {
+      const list = refdata.tyresFor(st.part, q).slice(0, 30);
+      const { value, data } = await openDialog(`
+        <h2>Choose the tyre</h2>
+        <label for="tq" class="sr">Search tyres</label>
+        <div class="searchrow"><input id="tq" name="q" type="search" placeholder="e.g. 24 x 14" autocomplete="off" value="${esc(q)}"><button class="btn lozenge" value="search" formnovalidate>Search</button></div>
+        <ul class="parts results">${list.map((t) => `<li><button class="result" value="t:${esc(t.part_num)}" formnovalidate><span class="pinfo"><span class="pname">${esc(t.name)}</span><span class="pmeta">${esc(t.part_num)}${t.near ? ' · same width' : ''}</span></span></button></li>`).join('') || '<li class="empty">No tyres match.</li>'}</ul>
+        <div class="row"><button class="btn" value="cancel" formnovalidate>Cancel</button></div>`, { data: true });
+      if (value === 'search') { q = String(data.get('q') || ''); continue; }
+      if (typeof value === 'string' && value.startsWith('t:')) return list.find((t) => t.part_num === value.slice(2)) || null;
+      return null;
+    }
   }
 
   function renderTop() {
@@ -493,32 +513,35 @@ export function createSorter(el, { onSaved, onChangePart, onUndo } = {}) {
       }
       const suggestedStore = part.unrec ? null : bins.resolveStorage(info.ctx, part, colorId);
       const rulesBefore = await bins.rulesSnapshot();
-      const before = { glass: { ...st.glass }, part, colorId, qty: st.qtyText, flags: { ...st.flags }, note: st.note };
+      const before = { comp: { ...st.comp }, part, colorId, qty: st.qtyText, flags: { ...st.flags }, note: st.note };
+      if (refdata.companionKind(part) === 'tyre' && st.comp.on && !st.comp.part) { toast('Choose the tyre first.'); return; }
       let receipt = await bins.saveToBins({ part, color: colorOf(colorId), flags: st.flags, note: st.note.trim(), items });
-      const glassPart = !part.unrec && st.glass.on ? refdata.glassFor(part.part_num) : null;
+      const kind = refdata.companionKind(part);
+      const glassPart = kind && st.comp.on ? st.comp.part : null;
+      const wordC = kind === 'tyre' ? 'Tyre' : 'Glass';
       let glassNote = '';
-      if (glassPart && colorOf(st.glass.colorId)) {
+      if (glassPart && colorOf(st.comp.colorId)) {
         const gItems = [];
         let skipped = 0;
         for (const it of items) {
           const b = info.ctx.bins.find((x) => x.id === it.binId);
           let binId = it.binId;
           if (b?.type === 'active') {
-            const e = (info.neededBy.get(glassPart.part_num) || []).find((x) => x.bin.id === b.id && x.colorId === st.glass.colorId);
-            if (!e || e.rem < it.qty) binId = bins.resolveStorage(info.ctx, glassPart, st.glass.colorId); // the set doesn’t need it: store it
+            const e = (info.neededBy.get(glassPart.part_num) || []).find((x) => x.bin.id === b.id && x.colorId === st.comp.colorId);
+            if (!e || e.rem < it.qty) binId = bins.resolveStorage(info.ctx, glassPart, st.comp.colorId); // the set doesn’t need it: store it
           }
           if (binId) gItems.push({ binId, qty: it.qty }); else skipped += it.qty;
         }
         if (gItems.length) {
-          const gr = await bins.saveToBins({ part: glassPart, color: colorOf(st.glass.colorId), flags: { sticker: false, printed: false, other: false }, note: '', items: gItems });
+          const gr = await bins.saveToBins({ part: glassPart, color: colorOf(st.comp.colorId), flags: { sticker: false, printed: false, other: false }, note: '', items: gItems });
           receipt = { log: [...receipt.log, ...gr.log], inv: [...receipt.inv, ...gr.inv] };
         }
-        glassNote = skipped ? ` Glass for ${fmt(skipped)} has no bin yet, so log it separately.` : ' Glass saved too.';
+        glassNote = skipped ? ` ${wordC} for ${fmt(skipped)} has no bin yet, so log it separately.` : ` ${wordC} saved too.`;
       }
       offerUndo(async () => {
         await bins.undoSave(receipt, rulesBefore);
         await refreshInfo();
-        Object.assign(st, { glass: before.glass, part: before.part, qtyText: before.qty, flags: before.flags, note: before.note, sugOpen: true });
+        Object.assign(st, { comp: before.comp, part: before.part, qtyText: before.qty, flags: before.flags, note: before.note, sugOpen: true });
         await chooseColor(before.colorId);
         onUndo?.();
         renderTop();
@@ -536,6 +559,10 @@ export function createSorter(el, { onSaved, onChangePart, onUndo } = {}) {
           part, chosenId: target.id, suggestedId: suggestedStore, ctx: info.ctx, colorId,
           catName: part.cat_id != null ? refdata.categoryName(part.cat_id) : '',
         });
+      }
+      if (glassPart && refdata.companionKind(part) === 'tyre') {
+        const m = (await db.getSetting('wheelTyres')) || {};
+        await db.setSetting('wheelTyres', { ...m, [part.part_num]: glassPart.part_num });
       }
       toast(`Saved to ${where}.${glassNote}${extra}`);
       await refreshInfo();
@@ -566,7 +593,7 @@ export function createSorter(el, { onSaved, onChangePart, onUndo } = {}) {
   }
 
   el.addEventListener('click', async (e) => {
-    const t = e.target.closest('[data-bin],[data-flag],[data-usecolor],#changePart,#colorBtn,#showSug,#glassToggle,#glassColorBtn,[data-addbin],#qtyMinus,#qtyPlus,#useSplit');
+    const t = e.target.closest('[data-bin],[data-flag],[data-usecolor],#changePart,#colorBtn,#showSug,#glassToggle,#glassColorBtn,#tyreBtn,[data-addbin],#qtyMinus,#qtyPlus,#useSplit');
     if (!t) return;
     if (t.dataset.addbin) { await addBinFlow(); return; }
     if (t.dataset.bin) {
@@ -593,10 +620,11 @@ export function createSorter(el, { onSaved, onChangePart, onUndo } = {}) {
     }
     switch (t.id) {
       case 'showSug': st.sugOpen = true; renderTop(); break;
-      case 'glassToggle': st.glass.on = !st.glass.on; renderTop(); break;
+      case 'glassToggle': st.comp.on = !st.comp.on; renderTop(); break;
+      case 'tyreBtn': { const t = await chooseTyre(); if (t) { st.comp.part = t; renderTop(); } break; }
       case 'glassColorBtn': {
-        const id = await pickColor(st.glass.colorId, { swatch: true });
-        if (id !== null) { st.glass.colorId = id; renderTop(); }
+        const id = await pickColor(st.comp.colorId, { swatch: true });
+        if (id !== null) { st.comp.colorId = id; renderTop(); }
         break;
       }
       case 'changePart': st.part = null; renderTop(); onChangePart?.(); break;
@@ -625,7 +653,14 @@ export function createSorter(el, { onSaved, onChangePart, onUndo } = {}) {
     async setPart(part) {
       hideUndo();
       st.part = part;
-      st.glass = { on: !!part.assembly, colorId: refdata.CLEAR_GLASS }; // a camera hit on an assembled part means the glass is fitted
+      const kind = refdata.companionKind(part);
+      const wheelTyres = kind === 'tyre' ? ((await db.getSetting('wheelTyres')) || {}) : {};
+      const known = kind === 'tyre' && wheelTyres[part.part_num] !== undefined ? refdata.ref.byNum.get(String(wheelTyres[part.part_num]).toLowerCase()) : undefined;
+      st.comp = {
+        on: (kind === 'glass' && !!part.assembly) || known !== undefined, // a camera hit on an assembled part means the glass is fitted
+        colorId: kind === 'tyre' ? refdata.BLACK : refdata.CLEAR_GLASS,
+        part: kind === 'glass' ? refdata.glassFor(part.part_num) : known === undefined ? null : { part_num: refdata.ref.parts[known][0], name: refdata.ref.parts[known][1], cat_id: refdata.ref.parts[known][2] },
+      };
       st.sugOpen = true;
       st.qtyText = '1';
       st.note = '';

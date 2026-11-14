@@ -80,6 +80,28 @@ export function pickerColors() {
 // Window frames that are normally sold with glass, and the part number of that glass.
 const GLASS_FOR = { 60592: '60601', 60593: '60602', 60594: '60603', 3853: '3855' };
 export const CLEAR_GLASS = 47; // Trans-Clear
+export const BLACK = 0;
+// 'glass' for a frame with known glass, 'tyre' for a wheel (the tyre is chosen), otherwise null.
+export function companionKind(part) {
+  if (!part || part.unrec) return null;
+  if (glassFor(part.part_num)) return 'glass';
+  return part.cat_id === 29 && /^Wheel\b/i.test(part.name || '') ? 'tyre' : null;
+}
+// Tyres for a wheel, those with the same width first (Wheel 18 x 14 -> Tyre 24 x 14), then the rest.
+export function tyresFor(wheel, query = '') {
+  const w = /(\d+(?:\.\d+)?) x (\d+(?:\.\d+)?)/.exec(wheel?.name || '');
+  const terms = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  const out = [];
+  for (let i = 0; i < ref.parts.length; i++) {
+    const [num, name, cat] = ref.parts[i];
+    if (cat !== 29 || !/^Tyre\b/i.test(name)) continue;
+    const hay = ref.lower[i];
+    if (terms.some((t) => !hay.includes(t))) continue;
+    const m = /(\d+(?:\.\d+)?) x (\d+(?:\.\d+)?)/.exec(name);
+    out.push({ part_num: num, name, cat_id: cat, near: !!(w && m && m[2] === w[2]) });
+  }
+  return out.sort((a, b) => Number(b.near) - Number(a.near) || a.name.localeCompare(b.name));
+}
 export function glassFor(partNum) {
   const g = GLASS_FOR[String(partNum)];
   const i = g === undefined ? undefined : ref.byNum.get(g);
